@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LitePoints 积分管理</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-1" aria-hidden="true"></div>
+    <div class="bg-shape bg-shape-2" aria-hidden="true"></div>
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-mark">LitePoints</div>
+        <div class="brand-sub">超轻量本地积分管理 · 只需打开此页</div>
+      </div>
+      <div class="status" id="data-status">数据准备中...</div>
+    </header>
+
+    <main class="app-grid">
+      <aside class="panel left-panel">
+        <h2>选择栏</h2>
+        <div class="toggle" role="tablist" aria-label="积分类型">
+          <button class="toggle-btn active" data-type="score" role="tab" aria-selected="true">得分项</button>
+          <button class="toggle-btn" data-type="tax" role="tab" aria-selected="false">税收项</button>
+          <button class="toggle-btn" data-type="event" role="tab" aria-selected="false">活动项</button>
+        </div>
+        <div class="manage-row">
+          <button id="open-editor" class="ghost-btn" type="button">管理选项</button>
+          <div class="manage-note">可编辑/新增/删除</div>
+        </div>
+
+        <section class="step">
+          <h3>1. 选择大类</h3>
+          <div id="category-list" class="chip-list"></div>
+        </section>
+
+        <section class="step">
+          <h3>2. 选择条目</h3>
+          <div id="item-list" class="item-list"></div>
+        </section>
+
+        <section class="step">
+          <h3>3. 设定倍数与日期</h3>
+          <div id="selected-item" class="selected-card">
+            <div class="selected-title">尚未选择条目</div>
+            <div class="selected-meta">请先选择左侧条目</div>
+          </div>
+          <label class="field">
+            倍数
+            <input id="multiplier" type="number" min="0.5" step="0.5" value="1" />
+          </label>
+          <label class="field">
+            日期
+            <input id="entry-date" type="date" />
+          </label>
+          <button id="add-entry" class="primary-btn" type="button">记录本次</button>
+          <div id="form-hint" class="hint" role="status"></div>
+        </section>
+      </aside>
+
+      <section class="panel center-panel">
+        <div class="view-toggle" role="tablist" aria-label="统计视图">
+          <button class="view-btn active" data-view="month" role="tab" aria-selected="true">月视图</button>
+          <button class="view-btn" data-view="week" role="tab" aria-selected="false">周视图</button>
+        </div>
+        <div class="calendar-head">
+          <button id="prev-month" class="ghost-btn" type="button">← 上个月</button>
+          <div class="month-label" id="month-label">--</div>
+          <button id="next-month" class="ghost-btn" type="button">下个月 →</button>
+        </div>
+        <div id="calendar-grid" class="calendar-grid" aria-live="polite"></div>
+        <div id="week-view" class="week-view" hidden>
+          <div id="week-grid" class="week-grid" aria-live="polite"></div>
+          <div class="week-category">
+            <div class="week-category-title">本周各大类得分</div>
+            <div id="week-category-list" class="week-category-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel right-panel">
+        <h2>信息栏</h2>
+        <section class="summary">
+          <div class="summary-title" id="selected-date-title">--</div>
+          <div class="summary-grid" id="day-summary"></div>
+        </section>
+        <section class="summary">
+          <div class="summary-title" id="week-summary-title">本周统计</div>
+          <div class="summary-grid" id="week-summary"></div>
+        </section>
+        <section class="step">
+          <h3>当天记录</h3>
+          <div id="entry-list" class="entry-list"></div>
+        </section>
+      </aside>
+    </main>
+
+    <div id="editor-modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-action="close-editor" aria-hidden="true"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-label="编辑选项">
+        <div class="modal-head">
+          <div class="modal-title">编辑选项</div>
+          <button id="close-editor" class="ghost-btn" type="button">完成</button>
+        </div>
+        <div class="editor-toggle" role="tablist" aria-label="编辑类型">
+          <button class="editor-btn active" data-type="score" role="tab" aria-selected="true">得分项</button>
+          <button class="editor-btn" data-type="tax" role="tab" aria-selected="false">税收项</button>
+          <button class="editor-btn" data-type="event" role="tab" aria-selected="false">活动项</button>
+        </div>
+        <div class="editor-body">
+          <div class="editor-hint">修改后会自动保存到本地浏览器</div>
+          <div id="editor-categories" class="editor-categories"></div>
+          <button id="add-category" class="ghost-btn editor-add" type="button">+ 添加大类</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

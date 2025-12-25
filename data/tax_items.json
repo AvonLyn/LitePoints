@@ -1,0 +1,240 @@
+{
+  "version": "1.0",
+  "type": "tax",
+  "categories": [
+    {
+      "id": "fixed",
+      "name": "固定税",
+      "items": [
+        {
+          "id": "fixed_manage",
+          "name": "管理费",
+          "desc": "无",
+          "rule": "每天/4积分",
+          "points": 4,
+          "cadence": "每天"
+        },
+        {
+          "id": "fixed_weekly",
+          "name": "周结算税",
+          "desc": "每周周末做复盘",
+          "rule": "每周/10积分",
+          "points": 10,
+          "cadence": "每周"
+        }
+      ]
+    },
+    {
+      "id": "decreasing",
+      "name": "递减税",
+      "items": [
+        {
+          "id": "dec_words_15",
+          "name": "背单词税收",
+          "desc": "专项<15积分",
+          "rule": "每周/12积分",
+          "points": 12,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_words_25",
+          "name": "背单词税收",
+          "desc": "15<专项<25",
+          "rule": "每周/10积分",
+          "points": 10,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_words_31",
+          "name": "背单词税收",
+          "desc": "25<专项<31",
+          "rule": "每周/5积分",
+          "points": 5,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_words_32",
+          "name": "背单词税收",
+          "desc": "31<专项",
+          "rule": "每周/1积分",
+          "points": 1,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_nc3_60",
+          "name": "新概念3税收",
+          "desc": "专项<60积分",
+          "rule": "每周/40积分",
+          "points": 40,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_nc3_97",
+          "name": "新概念3税收",
+          "desc": "60<专项<97",
+          "rule": "每周/25积分",
+          "points": 25,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_nc3_121",
+          "name": "新概念3税收",
+          "desc": "97<专项<121",
+          "rule": "每周/15积分",
+          "points": 15,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_nc3_122",
+          "name": "新概念3税收",
+          "desc": "121<专项",
+          "rule": "每周/5积分",
+          "points": 5,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_zy_52",
+          "name": "张宇",
+          "desc": "专项<52积分",
+          "rule": "每周/30积分",
+          "points": 30,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_zy_83",
+          "name": "张宇",
+          "desc": "52<专项<83",
+          "rule": "每周/20积分",
+          "points": 20,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_zy_121",
+          "name": "张宇",
+          "desc": "97<专项<121",
+          "rule": "每周/10积分",
+          "points": 10,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_zy_122",
+          "name": "张宇",
+          "desc": "121<专项",
+          "rule": "每周/2积分",
+          "points": 2,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_sig_26",
+          "name": "信号与系统",
+          "desc": "专项<26积分",
+          "rule": "每周/18积分",
+          "points": 18,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_sig_83",
+          "name": "信号与系统",
+          "desc": "52<专项<83",
+          "rule": "每周/12积分",
+          "points": 12,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_sig_121",
+          "name": "信号与系统",
+          "desc": "97<专项<121",
+          "rule": "每周/6积分",
+          "points": 6,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_sig_122",
+          "name": "信号与系统",
+          "desc": "121<专项",
+          "rule": "每周/1积分",
+          "points": 1,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_hab_14",
+          "name": "生活习惯",
+          "desc": "专项<14积分",
+          "rule": "每周/10积分",
+          "points": 10,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_hab_22",
+          "name": "生活习惯",
+          "desc": "14<专项<22",
+          "rule": "每周/6积分",
+          "points": 6,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_hab_28",
+          "name": "生活习惯",
+          "desc": "22<专项<28",
+          "rule": "每周/2积分",
+          "points": 2,
+          "cadence": "每周"
+        },
+        {
+          "id": "dec_hab_29",
+          "name": "生活习惯",
+          "desc": "28<专项",
+          "rule": "每周/0积分",
+          "points": 0,
+          "cadence": "每周"
+        }
+      ]
+    },
+    {
+      "id": "discipline",
+      "name": "纪律税",
+      "items": [
+        {
+          "id": "disc_idle",
+          "name": "空转税",
+          "desc": "当天学习总积分<10",
+          "rule": "每天/5积分",
+          "points": 5,
+          "cadence": "每天"
+        },
+        {
+          "id": "disc_delay",
+          "name": "拖延开工税",
+          "desc": "当天学习任务首次开工晚于21:00",
+          "rule": "每天/3积分",
+          "points": 3,
+          "cadence": "每天"
+        },
+        {
+          "id": "disc_shortvideo",
+          "name": "短视频税",
+          "desc": "抖音/小红书，每天使用时间加起来大于3小时",
+          "rule": "每30min/2积分",
+          "points": 2,
+          "cadence": "每30min"
+        },
+        {
+          "id": "disc_latewake",
+          "name": "迟起罚税",
+          "desc": "晚于8:30起床",
+          "rule": "每次/2积分",
+          "points": 2,
+          "cadence": "每次"
+        },
+        {
+          "id": "disc_latenight",
+          "name": "熬夜罚税",
+          "desc": "晚于0:00入睡",
+          "rule": "每次/2积分",
+          "points": 2,
+          "cadence": "每次"
+        }
+      ]
+    }
+  ]
+}

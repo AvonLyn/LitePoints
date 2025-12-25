@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "type": "event",
+  "categories": [
+    {
+      "id": "special",
+      "name": "活动",
+      "items": [
+        {
+          "id": "event_default",
+          "name": "特殊活动",
+          "desc": "自定义活动",
+          "rule": "按需填写",
+          "points": 1
+        }
+      ]
+    }
+  ]
+}

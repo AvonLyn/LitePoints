@@ -1,0 +1,218 @@
+{
+  "version": "1.0",
+  "type": "score",
+  "categories": [
+    {
+      "id": "words",
+      "name": "背单词",
+      "items": [
+        {
+          "id": "words_cilin",
+          "name": "词林小憩",
+          "desc": "复习单词",
+          "rule": "复习数量50个/1积分，总数小于50算0.5积分",
+          "points": 1
+        },
+        {
+          "id": "words_cihai",
+          "name": "词海远航",
+          "desc": "复习单词",
+          "rule": "总数＞150，每30个增加1积分",
+          "points": 1
+        },
+        {
+          "id": "words_shili",
+          "name": "十里词香",
+          "desc": "背诵新单词，十位数发生改变",
+          "rule": "每变1次0.5积分",
+          "points": 0.5
+        },
+        {
+          "id": "words_baici",
+          "name": "百词斩",
+          "desc": "背诵新单词，百位数发生改变",
+          "rule": "每变1次3积分",
+          "points": 3
+        },
+        {
+          "id": "words_chijie",
+          "name": "词界传说",
+          "desc": "背诵新单词，千位数发生改变",
+          "rule": "每变一次20积分",
+          "points": 20
+        }
+      ]
+    },
+    {
+      "id": "newconcept3",
+      "name": "新概念3",
+      "items": [
+        {
+          "id": "nc3_julin",
+          "name": "句林采风",
+          "desc": "听写课文，2遍起步。",
+          "rule": "每2遍/2积分",
+          "points": 2
+        },
+        {
+          "id": "nc3_yufa",
+          "name": "语法灯塔",
+          "desc": "听网课",
+          "rule": "每节课/10积分",
+          "points": 10
+        },
+        {
+          "id": "nc3_biji",
+          "name": "笔记回炉",
+          "desc": "网课复习(见概3-学习方法规划-2)",
+          "rule": "每节课/3积分",
+          "points": 3
+        },
+        {
+          "id": "nc3_yingdu",
+          "name": "影读留声",
+          "desc": "跟读音频，录音",
+          "rule": "每读一次/1积分",
+          "points": 1
+        },
+        {
+          "id": "nc3_juzi",
+          "name": "句子操场",
+          "desc": "默写课文，练习阶段",
+          "rule": "每写一次/2积分",
+          "points": 2
+        },
+        {
+          "id": "nc3_zhanghui",
+          "name": "章回通关",
+          "desc": "默写课文，考核",
+          "rule": "默写成功/15积分",
+          "points": 15
+        }
+      ]
+    },
+    {
+      "id": "zhangyu",
+      "name": "张宇",
+      "items": [
+        {
+          "id": "zy_shiye",
+          "name": "十页小跑",
+          "desc": "30讲教材",
+          "rule": "每10页/2积分",
+          "points": 2
+        },
+        {
+          "id": "zy_jiejie",
+          "name": "节节高",
+          "desc": "30讲，学完1个小节",
+          "rule": "每小节/3积分",
+          "points": 3
+        },
+        {
+          "id": "zy_zhangyu",
+          "name": "章域征服",
+          "desc": "30讲，学完1个章节",
+          "rule": "每章节/15积分",
+          "points": 15
+        },
+        {
+          "id": "zy_kehou",
+          "name": "课后扫荡",
+          "desc": "30讲，写完1个章节的课后题",
+          "rule": "每章节/10积分",
+          "points": 10
+        },
+        {
+          "id": "zy_tuoyan",
+          "name": "推演筑基",
+          "desc": "1000题，写完1个章节的基础篇",
+          "rule": "每章节/15积分",
+          "points": 15
+        }
+      ]
+    },
+    {
+      "id": "signals",
+      "name": "信号与系统",
+      "items": [
+        {
+          "id": "sig_shiye",
+          "name": "十页巡航",
+          "desc": "奥本海姆书籍，每10页",
+          "rule": "每10页/2积分",
+          "points": 2
+        },
+        {
+          "id": "sig_nianwu",
+          "name": "廿五奇遇",
+          "desc": "奥本海姆书籍，每逢25的倍数",
+          "rule": "每1次/5积分",
+          "points": 5
+        },
+        {
+          "id": "sig_baiye",
+          "name": "百页跃迁",
+          "desc": "奥本海姆书籍，百位数变动",
+          "rule": "每100页/30积分",
+          "points": 30
+        },
+        {
+          "id": "sig_zhangmo",
+          "name": "章末清怪",
+          "desc": "奥本海姆完成课后题",
+          "rule": "每章节/15积分",
+          "points": 15
+        },
+        {
+          "id": "sig_xiaojie",
+          "name": "小节采样",
+          "desc": "960，写完1个小节",
+          "rule": "每小节/5积分",
+          "points": 5
+        },
+        {
+          "id": "sig_zhengzhang",
+          "name": "整章通关",
+          "desc": "960，写完1个章节",
+          "rule": "每章节/10积分",
+          "points": 10
+        },
+        {
+          "id": "sig_jiyi",
+          "name": "记忆反潜",
+          "desc": "听网课",
+          "rule": "每节课/8积分",
+          "points": 8
+        }
+      ]
+    },
+    {
+      "id": "habits",
+      "name": "生活习惯",
+      "items": [
+        {
+          "id": "hab_zaoniao",
+          "name": "早鸟上线",
+          "desc": "早起 早于8:30起床",
+          "rule": "每次/1积分",
+          "points": 1
+        },
+        {
+          "id": "hab_lingdian",
+          "name": "零点收网",
+          "desc": "早睡 早于00:00睡觉",
+          "rule": "每次/1积分",
+          "points": 1
+        },
+        {
+          "id": "hab_xiachu",
+          "name": "下厨打卡",
+          "desc": "自己做饭",
+          "rule": "每顿/2积分",
+          "points": 2
+        }
+      ]
+    }
+  ]
+}
