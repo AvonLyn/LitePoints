@@ -480,10 +480,15 @@ const FALLBACK_EVENT_DATA = {
 
 const STORAGE_KEY = "litepoints_entries_v1";
 const CATALOG_KEY = "litepoints_catalog_v1";
+const PEOPLE_KEY = "litepoints_people_v1";
+const ACTIVE_PERSON_KEY = "litepoints_active_person_v1";
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const WEEKDAY_FULL = ["日", "一", "二", "三", "四", "五", "六"];
 
 const state = {
+  baseScoreData: null,
+  baseTaxData: null,
+  baseEventData: null,
   scoreData: null,
   taxData: null,
   eventData: null,
@@ -494,11 +499,17 @@ const state = {
   currentMonth: null,
   selectedDate: null,
   viewMode: "month",
-  editorType: "score"
+  editorType: "score",
+  people: [],
+  activePersonId: null,
+  usingFallbackData: false,
+  weekCategorySelection: null
 };
 
 const elements = {
   dataStatus: document.getElementById("data-status"),
+  personSelect: document.getElementById("person-select"),
+  managePeople: document.getElementById("manage-people"),
   toggleButtons: document.querySelectorAll(".toggle-btn"),
   categoryList: document.getElementById("category-list"),
   itemList: document.getElementById("item-list"),
@@ -510,7 +521,8 @@ const elements = {
   calendarGrid: document.getElementById("calendar-grid"),
   weekView: document.getElementById("week-view"),
   weekGrid: document.getElementById("week-grid"),
-  weekCategoryList: document.getElementById("week-category-list"),
+  weekScoreCategoryList: document.getElementById("week-score-category-list"),
+  weekTaxCategoryList: document.getElementById("week-tax-category-list"),
   monthLabel: document.getElementById("month-label"),
   prevMonth: document.getElementById("prev-month"),
   nextMonth: document.getElementById("next-month"),
@@ -520,13 +532,19 @@ const elements = {
   daySummary: document.getElementById("day-summary"),
   weekSummary: document.getElementById("week-summary"),
   weekSummaryTitle: document.getElementById("week-summary-title"),
+  weekCategoryDetailTitle: document.getElementById("week-category-detail-title"),
+  weekCategoryDetailList: document.getElementById("week-category-detail-list"),
   entryList: document.getElementById("entry-list"),
   openEditor: document.getElementById("open-editor"),
   editorModal: document.getElementById("editor-modal"),
   closeEditor: document.getElementById("close-editor"),
   editorButtons: document.querySelectorAll(".editor-btn"),
   editorCategories: document.getElementById("editor-categories"),
-  addCategoryButton: document.getElementById("add-category")
+  addCategoryButton: document.getElementById("add-category"),
+  peopleModal: document.getElementById("people-modal"),
+  closePeople: document.getElementById("close-people"),
+  peopleList: document.getElementById("people-list"),
+  addPersonButton: document.getElementById("add-person")
 };
 
 function toDateString(date) {
@@ -548,6 +566,19 @@ function roundPoints(value) {
 function formatPoints(value) {
   const safe = roundPoints(value);
   return Number.isInteger(safe) ? String(safe) : String(safe);
+}
+
+function formatSignedValue(value, type) {
+  const safe = roundPoints(Math.abs(value));
+  if (!safe) {
+    return "0";
+  }
+  const sign = type === "tax" ? "-" : "+";
+  return `${sign}${formatPoints(safe)}`;
+}
+
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data));
 }
 
 function setHint(message, tone) {
@@ -577,9 +608,21 @@ async function loadJson(url, fallback) {
   }
 }
 
-function loadEntries() {
+function getEntriesKey(personId) {
+  return `${STORAGE_KEY}__${personId}`;
+}
+
+function getCatalogKey(personId) {
+  return `${CATALOG_KEY}__${personId}`;
+}
+
+function loadEntries(personId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const targetId = personId || state.activePersonId;
+    if (!targetId) {
+      return [];
+    }
+    const raw = localStorage.getItem(getEntriesKey(targetId));
     if (!raw) {
       return [];
     }
@@ -591,16 +634,23 @@ function loadEntries() {
 }
 
 function saveEntries() {
+  if (!state.activePersonId) {
+    return;
+  }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.entries));
+    localStorage.setItem(getEntriesKey(state.activePersonId), JSON.stringify(state.entries));
   } catch (error) {
     setHint("本地存储不可用，刷新后数据可能丢失。", "warn");
   }
 }
 
-function loadCatalog() {
+function loadCatalog(personId) {
   try {
-    const raw = localStorage.getItem(CATALOG_KEY);
+    const targetId = personId || state.activePersonId;
+    if (!targetId) {
+      return null;
+    }
+    const raw = localStorage.getItem(getCatalogKey(targetId));
     if (!raw) {
       return null;
     }
@@ -612,15 +662,271 @@ function loadCatalog() {
 }
 
 function saveCatalog() {
+  if (!state.activePersonId) {
+    return;
+  }
   try {
     const payload = {
       score: state.scoreData,
       tax: state.taxData,
       event: state.eventData
     };
-    localStorage.setItem(CATALOG_KEY, JSON.stringify(payload));
+    localStorage.setItem(getCatalogKey(state.activePersonId), JSON.stringify(payload));
+    updateDataStatus(true);
   } catch (error) {
     setHint("本地存储不可用，刷新后自定义配置可能丢失。", "warn");
+  }
+}
+
+function loadPeople() {
+  try {
+    const raw = localStorage.getItem(PEOPLE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function savePeople() {
+  try {
+    localStorage.setItem(PEOPLE_KEY, JSON.stringify(state.people));
+  } catch (error) {
+    setHint("本地存储不可用，人员列表可能无法保存。", "warn");
+  }
+}
+
+function getActivePerson() {
+  return state.people.find((person) => person.id === state.activePersonId) || null;
+}
+
+function updateDataStatus(hasCustom) {
+  const person = getActivePerson();
+  const personName = person ? person.name : "未命名";
+  const dataSource = hasCustom
+    ? "本地自定义数据"
+    : state.usingFallbackData
+      ? "内置数据"
+      : "JSON 数据";
+  elements.dataStatus.textContent = `已载入${dataSource} · ${personName} · 本地存储已启用`;
+}
+
+function renderPersonSelect() {
+  if (!elements.personSelect) {
+    return;
+  }
+  elements.personSelect.innerHTML = "";
+  state.people.forEach((person) => {
+    const option = document.createElement("option");
+    option.value = person.id;
+    option.textContent = person.name;
+    elements.personSelect.appendChild(option);
+  });
+  if (state.activePersonId) {
+    elements.personSelect.value = state.activePersonId;
+  }
+}
+
+function migrateLegacyData(defaultId) {
+  try {
+    const legacyEntries = localStorage.getItem(STORAGE_KEY);
+    if (legacyEntries && !localStorage.getItem(getEntriesKey(defaultId))) {
+      localStorage.setItem(getEntriesKey(defaultId), legacyEntries);
+    }
+    const legacyCatalog = localStorage.getItem(CATALOG_KEY);
+    if (legacyCatalog && !localStorage.getItem(getCatalogKey(defaultId))) {
+      localStorage.setItem(getCatalogKey(defaultId), legacyCatalog);
+    }
+  } catch (error) {
+    return;
+  }
+}
+
+function initializePeople() {
+  let people = loadPeople();
+  if (!Array.isArray(people) || people.length === 0) {
+    const defaultPerson = {
+      id: safeId(),
+      name: "默认"
+    };
+    people = [defaultPerson];
+    state.people = people;
+    savePeople();
+    state.activePersonId = defaultPerson.id;
+    try {
+      localStorage.setItem(ACTIVE_PERSON_KEY, defaultPerson.id);
+    } catch (error) {
+      return;
+    }
+    migrateLegacyData(defaultPerson.id);
+    return;
+  }
+
+  state.people = people;
+  try {
+    const storedActive = localStorage.getItem(ACTIVE_PERSON_KEY);
+    if (storedActive && people.some((person) => person.id === storedActive)) {
+      state.activePersonId = storedActive;
+    } else {
+      state.activePersonId = people[0].id;
+      localStorage.setItem(ACTIVE_PERSON_KEY, state.activePersonId);
+    }
+  } catch (error) {
+    state.activePersonId = people[0].id;
+  }
+}
+
+function setActivePerson(personId) {
+  if (!personId || !state.people.some((person) => person.id === personId)) {
+    return;
+  }
+  state.activePersonId = personId;
+  try {
+    localStorage.setItem(ACTIVE_PERSON_KEY, personId);
+  } catch (error) {
+    setHint("本地存储不可用，当前人员状态可能无法保存。", "warn");
+  }
+
+  const catalog = loadCatalog(personId);
+  state.scoreData = catalog && catalog.score ? catalog.score : cloneData(state.baseScoreData);
+  state.taxData = catalog && catalog.tax ? catalog.tax : cloneData(state.baseTaxData);
+  state.eventData = catalog && catalog.event ? catalog.event : cloneData(state.baseEventData);
+  state.entries = loadEntries(personId);
+  state.activeCategoryId = null;
+  state.activeItemId = null;
+  state.weekCategorySelection = null;
+
+  renderPersonSelect();
+  updateDataStatus(!!catalog);
+  renderAll();
+}
+
+function openPeopleModal() {
+  renderPeopleManager();
+  elements.peopleModal.classList.add("open");
+  elements.peopleModal.setAttribute("aria-hidden", "false");
+}
+
+function closePeopleModal() {
+  elements.peopleModal.classList.remove("open");
+  elements.peopleModal.setAttribute("aria-hidden", "true");
+}
+
+function renderPeopleManager() {
+  elements.peopleList.innerHTML = "";
+  state.people.forEach((person) => {
+    const row = document.createElement("div");
+    row.className = "people-row";
+
+    const info = document.createElement("div");
+    info.className = "people-info";
+
+    const label = document.createElement("label");
+    label.className = "people-label";
+    label.textContent = "姓名";
+
+    const input = document.createElement("input");
+    input.className = "people-input";
+    input.value = person.name;
+    input.dataset.personId = person.id;
+    label.appendChild(input);
+    info.appendChild(label);
+
+    if (person.id === state.activePersonId) {
+      const tag = document.createElement("div");
+      tag.className = "people-tag";
+      tag.textContent = "当前";
+      info.appendChild(tag);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "people-actions";
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "people-remove";
+    removeButton.textContent = "删除";
+    removeButton.dataset.action = "remove-person";
+    removeButton.dataset.personId = person.id;
+    if (state.people.length === 1) {
+      removeButton.disabled = true;
+    }
+    actions.appendChild(removeButton);
+
+    row.appendChild(info);
+    row.appendChild(actions);
+    elements.peopleList.appendChild(row);
+  });
+}
+
+function handlePeopleInput(event) {
+  const target = event.target;
+  if (!target.classList.contains("people-input")) {
+    return;
+  }
+  const personId = target.dataset.personId;
+  const person = state.people.find((item) => item.id === personId);
+  if (!person) {
+    return;
+  }
+  person.name = target.value.trim() || "未命名";
+  savePeople();
+  renderPersonSelect();
+  renderPeopleManager();
+  if (person.id === state.activePersonId) {
+    updateDataStatus(!!loadCatalog(person.id));
+  }
+}
+
+function addPerson() {
+  const nextIndex = state.people.length + 1;
+  const person = {
+    id: safeId(),
+    name: `成员${nextIndex}`
+  };
+  state.people.push(person);
+  savePeople();
+  setActivePerson(person.id);
+  renderPeopleManager();
+}
+
+function handlePeopleAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) {
+    return;
+  }
+  const action = button.dataset.action;
+  if (action === "add-person") {
+    addPerson();
+    return;
+  }
+  if (action === "remove-person") {
+    if (state.people.length <= 1) {
+      return;
+    }
+    const personId = button.dataset.personId;
+    const person = state.people.find((item) => item.id === personId);
+    const personName = person ? person.name : "该成员";
+    if (!confirm(`确认删除 ${personName}？删除后对应数据将被清空。`)) {
+      return;
+    }
+    state.people = state.people.filter((item) => item.id !== personId);
+    savePeople();
+    try {
+      localStorage.removeItem(getEntriesKey(personId));
+      localStorage.removeItem(getCatalogKey(personId));
+    } catch (error) {
+      return;
+    }
+    if (state.activePersonId === personId) {
+      setActivePerson(state.people[0].id);
+    } else {
+      renderPersonSelect();
+    }
+    renderPeopleManager();
   }
 }
 
@@ -655,6 +961,14 @@ function getActiveItem() {
     return null;
   }
   return category.items.find((item) => item.id === state.activeItemId) || null;
+}
+
+function getCategoryById(type, categoryId) {
+  const data = getDataByType(type);
+  if (!data || !Array.isArray(data.categories)) {
+    return null;
+  }
+  return data.categories.find((category) => category.id === categoryId) || null;
 }
 
 function ensureActiveSelection() {
@@ -1014,19 +1328,40 @@ function getCategoryTotalsForRange(startDate, endDate, type) {
   return totals;
 }
 
-function renderWeekCategorySummary(startDate, endDate) {
-  const totals = getCategoryTotalsForRange(startDate, endDate, "score");
-  elements.weekCategoryList.innerHTML = "";
+function renderWeekCategorySummary(type, container, startDate, endDate) {
+  const typeLabel = type === "tax" ? "税收" : "得分";
+  const totals = getCategoryTotalsForRange(startDate, endDate, type);
+  if (state.weekCategorySelection && state.weekCategorySelection.type === type) {
+    const exists = totals.some((category) => category.id === state.weekCategorySelection.categoryId);
+    if (!exists) {
+      state.weekCategorySelection = null;
+    }
+  }
+
+  container.innerHTML = "";
   if (totals.length === 0) {
-    elements.weekCategoryList.innerHTML = `<div class="item-meta">暂无得分大类。</div>`;
+    container.innerHTML = `<div class="item-meta">暂无${typeLabel}大类。</div>`;
     return;
   }
   totals.forEach((category) => {
-    const card = document.createElement("div");
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "week-category-card";
+    if (type === "tax") {
+      card.classList.add("is-tax");
+    }
     if (!category.total) {
       card.classList.add("is-zero");
     }
+    if (
+      state.weekCategorySelection &&
+      state.weekCategorySelection.type === type &&
+      state.weekCategorySelection.categoryId === category.id
+    ) {
+      card.classList.add("is-active");
+    }
+    card.dataset.type = type;
+    card.dataset.categoryId = category.id;
 
     const name = document.createElement("div");
     name.className = "week-category-name";
@@ -1034,11 +1369,14 @@ function renderWeekCategorySummary(startDate, endDate) {
 
     const value = document.createElement("div");
     value.className = "week-category-value";
-    value.textContent = `+${formatPoints(category.total)}`;
+    if (type === "tax") {
+      value.classList.add("tax");
+    }
+    value.textContent = formatSignedValue(category.total, type);
 
     card.appendChild(name);
     card.appendChild(value);
-    elements.weekCategoryList.appendChild(card);
+    container.appendChild(card);
   });
 }
 
@@ -1089,7 +1427,37 @@ function renderWeekView() {
     elements.weekGrid.appendChild(button);
   }
 
-  renderWeekCategorySummary(range.start, range.end);
+  if (elements.weekScoreCategoryList) {
+    renderWeekCategorySummary("score", elements.weekScoreCategoryList, range.start, range.end);
+  }
+  if (elements.weekTaxCategoryList) {
+    renderWeekCategorySummary("tax", elements.weekTaxCategoryList, range.start, range.end);
+  }
+}
+
+function handleWeekCategorySelect(event) {
+  const button = event.target.closest(".week-category-card");
+  if (!button) {
+    return;
+  }
+  const { type, categoryId } = button.dataset;
+  if (!type || !categoryId) {
+    return;
+  }
+  if (
+    state.weekCategorySelection &&
+    state.weekCategorySelection.type === type &&
+    state.weekCategorySelection.categoryId === categoryId
+  ) {
+    state.weekCategorySelection = null;
+  } else {
+    state.weekCategorySelection = {
+      type,
+      categoryId
+    };
+  }
+  renderWeekView();
+  renderDetails();
 }
 
 function setViewMode(mode) {
@@ -1106,6 +1474,97 @@ function setViewMode(mode) {
     button.setAttribute("aria-selected", active ? "true" : "false");
   });
   renderAll();
+}
+
+function renderWeekCategoryDetails() {
+  if (!elements.weekCategoryDetailTitle || !elements.weekCategoryDetailList) {
+    return;
+  }
+  elements.weekCategoryDetailTitle.classList.remove("tax", "score");
+  if (state.viewMode !== "week") {
+    elements.weekCategoryDetailTitle.textContent = "本周大类明细";
+    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">切换到周视图查看明细。</div>`;
+    return;
+  }
+  if (!state.weekCategorySelection) {
+    elements.weekCategoryDetailTitle.textContent = "本周大类明细";
+    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">点击周视图中的大类查看明细。</div>`;
+    return;
+  }
+
+  const { type, categoryId } = state.weekCategorySelection;
+  const typeLabel = type === "tax" ? "税收" : "得分";
+  elements.weekCategoryDetailTitle.classList.add(type === "tax" ? "tax" : "score");
+  const category = getCategoryById(type, categoryId);
+  const categoryName = category ? category.name : "已删除大类";
+
+  const range = getWeekRange(state.selectedDate);
+  const entries = state.entries
+    .filter((entry) => {
+      if (entry.type !== type || entry.categoryId !== categoryId) {
+        return false;
+      }
+      const entryDate = parseDate(entry.date);
+      return entryDate >= range.start && entryDate <= range.end;
+    })
+    .sort((a, b) => {
+      if (a.date === b.date) {
+        return a.createdAt - b.createdAt;
+      }
+      return a.date.localeCompare(b.date);
+    });
+
+  const total = entries.reduce((sum, entry) => sum + entry.total, 0);
+  elements.weekCategoryDetailTitle.textContent = `本周${typeLabel} · ${categoryName} · ${formatSignedValue(
+    total,
+    type
+  )}`;
+
+  elements.weekCategoryDetailList.innerHTML = "";
+  if (entries.length === 0) {
+    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">本周暂无记录。</div>`;
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const card = document.createElement("div");
+    card.className = "week-detail-card";
+    card.classList.add(type === "tax" ? "is-tax" : "is-score");
+
+    const row = document.createElement("div");
+    row.className = "week-detail-row";
+
+    const dateTag = document.createElement("div");
+    dateTag.className = "week-detail-date";
+    const weekday = WEEKDAY_FULL[parseDate(entry.date).getDay()];
+    dateTag.textContent = `${entry.date} 周${weekday}`;
+
+    const amount = document.createElement("div");
+    amount.className = "week-detail-amount";
+    if (type === "tax") {
+      amount.classList.add("tax");
+    }
+    amount.textContent = formatSignedValue(entry.total, type);
+
+    row.appendChild(dateTag);
+    row.appendChild(amount);
+
+    const name = document.createElement("div");
+    name.className = "week-detail-name";
+    name.textContent = entry.itemName;
+
+    const meta = document.createElement("div");
+    meta.className = "week-detail-meta";
+    const detail = [entry.desc, entry.rule].filter(Boolean).join(" · ");
+    meta.textContent = detail
+      ? `倍数 ${formatPoints(entry.multiplier)} · ${detail}`
+      : `倍数 ${formatPoints(entry.multiplier)}`;
+
+    card.appendChild(row);
+    card.appendChild(name);
+    card.appendChild(meta);
+    elements.weekCategoryDetailList.appendChild(card);
+  });
 }
 
 function renderDetails() {
@@ -1131,6 +1590,7 @@ function renderDetails() {
   renderSummary(elements.weekSummary, weekTotals);
 
   renderEntryList(state.selectedDate);
+  renderWeekCategoryDetails();
 }
 
 function renderAll() {
@@ -1573,21 +2033,43 @@ async function init() {
     loadJson("data/tax_items.json", FALLBACK_TAX_DATA),
     loadJson("data/event_items.json", FALLBACK_EVENT_DATA)
   ]);
-  const catalog = loadCatalog();
-  state.scoreData = (catalog && catalog.score) || scoreData;
-  state.taxData = (catalog && catalog.tax) || taxData;
-  state.eventData = (catalog && catalog.event) || eventData;
-  state.entries = loadEntries();
-
-  const usingFallback = scoreData === FALLBACK_SCORE_DATA || taxData === FALLBACK_TAX_DATA;
-  const hasCustom = !!(catalog && (catalog.score || catalog.tax || catalog.event));
-  const dataSource = hasCustom ? "本地自定义数据" : usingFallback ? "内置数据" : "JSON 数据";
-  elements.dataStatus.textContent = `已载入${dataSource} · 本地存储已启用`;
+  state.baseScoreData = scoreData;
+  state.baseTaxData = taxData;
+  state.baseEventData = eventData;
+  state.usingFallbackData =
+    scoreData === FALLBACK_SCORE_DATA || taxData === FALLBACK_TAX_DATA || eventData === FALLBACK_EVENT_DATA;
 
   const today = new Date();
   state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   state.selectedDate = toDateString(today);
   elements.dateInput.value = state.selectedDate;
+
+  initializePeople();
+
+  if (elements.personSelect) {
+    elements.personSelect.addEventListener("change", (event) => setActivePerson(event.target.value));
+  }
+  if (elements.managePeople) {
+    elements.managePeople.addEventListener("click", openPeopleModal);
+  }
+  if (elements.closePeople) {
+    elements.closePeople.addEventListener("click", closePeopleModal);
+  }
+  if (elements.peopleList) {
+    elements.peopleList.addEventListener("change", handlePeopleInput);
+    elements.peopleList.addEventListener("click", handlePeopleAction);
+  }
+  if (elements.addPersonButton) {
+    elements.addPersonButton.dataset.action = "add-person";
+    elements.addPersonButton.addEventListener("click", handlePeopleAction);
+  }
+  if (elements.peopleModal) {
+    elements.peopleModal.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-people") {
+        closePeopleModal();
+      }
+    });
+  }
 
   elements.toggleButtons.forEach((button) => {
     button.addEventListener("click", () => setActiveType(button.dataset.type));
@@ -1603,6 +2085,9 @@ async function init() {
       }
       setViewMode(button.dataset.view);
     });
+  }
+  if (elements.weekView) {
+    elements.weekView.addEventListener("click", handleWeekCategorySelect);
   }
   elements.addButton.addEventListener("click", addEntry);
   elements.prevMonth.addEventListener("click", () => shiftPeriod(-1));
@@ -1622,12 +2107,18 @@ async function init() {
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && elements.editorModal.classList.contains("open")) {
+    if (event.key !== "Escape") {
+      return;
+    }
+    if (elements.editorModal.classList.contains("open")) {
       closeEditor();
+    }
+    if (elements.peopleModal.classList.contains("open")) {
+      closePeopleModal();
     }
   });
 
-  renderAll();
+  setActivePerson(state.activePersonId);
 }
 
 init();

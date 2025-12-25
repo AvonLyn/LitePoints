@@ -14,7 +14,16 @@
         <div class="brand-mark">LitePoints</div>
         <div class="brand-sub">超轻量本地积分管理 · 只需打开此页</div>
       </div>
-      <div class="status" id="data-status">数据准备中...</div>
+      <div class="top-actions">
+        <div class="person-switcher">
+          <label class="person-label" for="person-select">被管理人</label>
+          <div class="person-select-wrap">
+            <select id="person-select" class="person-select" aria-label="被管理人"></select>
+          </div>
+          <button id="manage-people" class="ghost-btn" type="button">管理</button>
+        </div>
+        <div class="status" id="data-status">数据准备中...</div>
+      </div>
     </header>
 
     <main class="app-grid">
@@ -73,8 +82,12 @@
         <div id="week-view" class="week-view" hidden>
           <div id="week-grid" class="week-grid" aria-live="polite"></div>
           <div class="week-category">
-            <div class="week-category-title">本周各大类得分</div>
-            <div id="week-category-list" class="week-category-list"></div>
+            <div class="week-category-title">本周得分大类</div>
+            <div id="week-score-category-list" class="week-category-list"></div>
+          </div>
+          <div class="week-category">
+            <div class="week-category-title tax">本周税收大类</div>
+            <div id="week-tax-category-list" class="week-category-list"></div>
           </div>
         </div>
       </section>
@@ -88,6 +101,10 @@
         <section class="summary">
           <div class="summary-title" id="week-summary-title">本周统计</div>
           <div class="summary-grid" id="week-summary"></div>
+        </section>
+        <section class="summary week-detail">
+          <div class="summary-title" id="week-category-detail-title">本周大类明细</div>
+          <div id="week-category-detail-list" class="week-detail-list"></div>
         </section>
         <section class="step">
           <h3>当天记录</h3>
@@ -112,6 +129,21 @@
           <div class="editor-hint">修改后会自动保存到本地浏览器</div>
           <div id="editor-categories" class="editor-categories"></div>
           <button id="add-category" class="ghost-btn editor-add" type="button">+ 添加大类</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="people-modal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-action="close-people" aria-hidden="true"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-label="被管理人管理">
+        <div class="modal-head">
+          <div class="modal-title">管理被管理人</div>
+          <button id="close-people" class="ghost-btn" type="button">完成</button>
+        </div>
+        <div class="people-body">
+          <div class="people-hint">名字可直接编辑，删除会清除对应数据</div>
+          <div id="people-list" class="people-list"></div>
+          <button id="add-person" class="ghost-btn people-add" type="button">+ 添加被管理人</button>
         </div>
       </div>
     </div>
