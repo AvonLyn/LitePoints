@@ -482,6 +482,12 @@ const STORAGE_KEY = "litepoints_entries_v1";
 const CATALOG_KEY = "litepoints_catalog_v1";
 const PEOPLE_KEY = "litepoints_people_v1";
 const ACTIVE_PERSON_KEY = "litepoints_active_person_v1";
+const BACKUP_DB_NAME = "litepoints_backup_db";
+const BACKUP_DB_STORE = "handles";
+const BACKUP_DB_KEY = "backup_directory";
+const BACKUP_PREFIX = "litepoints_backup";
+const BACKUP_LIMIT = 3;
+const BACKUP_VERSION = "1.0";
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const WEEKDAY_FULL = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -503,13 +509,23 @@ const state = {
   people: [],
   activePersonId: null,
   usingFallbackData: false,
-  weekCategorySelection: null
+  weekCategorySelection: null,
+  backupDirectoryHandle: null,
+  backupPermission: "unknown",
+  autoBackupQueue: 0,
+  autoBackupRunning: false,
+  suspendAutoBackup: false
 };
 
 const elements = {
   dataStatus: document.getElementById("data-status"),
   personSelect: document.getElementById("person-select"),
   managePeople: document.getElementById("manage-people"),
+  backupFolderButton: document.getElementById("backup-folder"),
+  backupExportButton: document.getElementById("backup-export"),
+  backupImportButton: document.getElementById("backup-import"),
+  backupFileInput: document.getElementById("backup-file-input"),
+  backupStatus: document.getElementById("backup-status"),
   toggleButtons: document.querySelectorAll(".toggle-btn"),
   categoryList: document.getElementById("category-list"),
   itemList: document.getElementById("item-list"),
@@ -589,6 +605,409 @@ function setHint(message, tone) {
   }
 }
 
+function setBackupStatus(message, tone) {
+  if (!elements.backupStatus) {
+    return;
+  }
+  elements.backupStatus.textContent = message || "";
+  elements.backupStatus.classList.remove("ok", "warn");
+  if (tone) {
+    elements.backupStatus.classList.add(tone);
+  }
+}
+
+function openBackupDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB not supported"));
+      return;
+    }
+    const request = indexedDB.open(BACKUP_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BACKUP_DB_STORE)) {
+        db.createObjectStore(BACKUP_DB_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Failed to open DB"));
+  });
+}
+
+async function loadBackupDirectoryHandle() {
+  try {
+    const db = await openBackupDb();
+    return await new Promise((resolve) => {
+      const tx = db.transaction(BACKUP_DB_STORE, "readonly");
+      const store = tx.objectStore(BACKUP_DB_STORE);
+      const request = store.get(BACKUP_DB_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => db.close();
+    });
+  } catch (error) {
+    return null;
+  }
+}
+
+async function saveBackupDirectoryHandle(handle) {
+  try {
+    const db = await openBackupDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(BACKUP_DB_STORE, "readwrite");
+      const store = tx.objectStore(BACKUP_DB_STORE);
+      const request = store.put(handle, BACKUP_DB_KEY);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => db.close();
+    });
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function supportsFileSystemAccess() {
+  return typeof window.showDirectoryPicker === "function";
+}
+
+async function queryBackupPermission(handle) {
+  if (!handle || typeof handle.queryPermission !== "function") {
+    return "granted";
+  }
+  try {
+    return await handle.queryPermission({ mode: "readwrite" });
+  } catch (error) {
+    return "denied";
+  }
+}
+
+async function requestBackupPermission(handle) {
+  if (!handle || typeof handle.requestPermission !== "function") {
+    return "denied";
+  }
+  try {
+    return await handle.requestPermission({ mode: "readwrite" });
+  } catch (error) {
+    return "denied";
+  }
+}
+
+async function initializeBackup() {
+  if (!elements.backupStatus) {
+    return;
+  }
+  if (!supportsFileSystemAccess()) {
+    setBackupStatus("自动备份：浏览器不支持", "warn");
+    return;
+  }
+  const storedHandle = await loadBackupDirectoryHandle();
+  if (!storedHandle) {
+    setBackupStatus("自动备份：未设置", "warn");
+    return;
+  }
+  state.backupDirectoryHandle = storedHandle;
+  const permission = await queryBackupPermission(storedHandle);
+  state.backupPermission = permission;
+  if (permission === "granted") {
+    setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
+  } else if (permission === "prompt") {
+    setBackupStatus("自动备份：待授权", "warn");
+  } else {
+    setBackupStatus("自动备份：未授权", "warn");
+  }
+}
+
+async function ensureBackupDirectory(interactive) {
+  if (!supportsFileSystemAccess()) {
+    setBackupStatus("自动备份：浏览器不支持", "warn");
+    return null;
+  }
+  let handle = state.backupDirectoryHandle;
+  if (!handle) {
+    handle = await loadBackupDirectoryHandle();
+    if (handle) {
+      state.backupDirectoryHandle = handle;
+    }
+  }
+  if (!handle) {
+    setBackupStatus("自动备份：未设置", "warn");
+    return null;
+  }
+
+  let permission = await queryBackupPermission(handle);
+  if (permission !== "granted" && interactive) {
+    permission = await requestBackupPermission(handle);
+  }
+  state.backupPermission = permission;
+  if (permission === "granted") {
+    setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
+    return handle;
+  }
+  if (permission === "prompt") {
+    setBackupStatus("自动备份：待授权", "warn");
+  } else {
+    setBackupStatus("自动备份：未授权", "warn");
+  }
+  return null;
+}
+
+function formatBackupTimestamp(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function buildBackupPayload(reason) {
+  const person = getActivePerson();
+  return {
+    type: "litepoints-backup",
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    reason,
+    person: {
+      id: person ? person.id : state.activePersonId,
+      name: person ? person.name : "未命名"
+    },
+    entries: state.entries,
+    catalog: {
+      score: state.scoreData,
+      tax: state.taxData,
+      event: state.eventData
+    }
+  };
+}
+
+function getBackupFilePrefix(personId) {
+  return `${BACKUP_PREFIX}_${personId}_`;
+}
+
+function parseBackupTimestamp(name, prefix) {
+  const raw = name.slice(prefix.length, -5);
+  const stamp = Number(raw);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+async function listBackups(dirHandle, personId) {
+  const prefix = getBackupFilePrefix(personId);
+  const backups = [];
+  try {
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (!name.startsWith(prefix) || !name.endsWith(".json")) {
+        continue;
+      }
+      if (handle.kind !== "file") {
+        continue;
+      }
+      backups.push({
+        name,
+        stamp: parseBackupTimestamp(name, prefix)
+      });
+    }
+  } catch (error) {
+    return [];
+  }
+  backups.sort((a, b) => a.stamp - b.stamp);
+  return backups;
+}
+
+async function writeBackupFile(dirHandle, payload) {
+  const personId = state.activePersonId;
+  if (!personId) {
+    return false;
+  }
+  const backups = await listBackups(dirHandle, personId);
+  const prefix = getBackupFilePrefix(personId);
+  const timestamp = Date.now();
+  let targetName = `${prefix}${timestamp}.json`;
+
+  if (backups.length >= BACKUP_LIMIT) {
+    const removeCount = backups.length - (BACKUP_LIMIT - 1);
+    if (typeof dirHandle.removeEntry === "function") {
+      for (let index = 0; index < removeCount; index += 1) {
+        const backup = backups[index];
+        if (!backup) {
+          continue;
+        }
+        try {
+          await dirHandle.removeEntry(backup.name);
+        } catch (error) {
+          targetName = backups[0].name;
+          break;
+        }
+      }
+    } else {
+      targetName = backups[0].name;
+    }
+  }
+
+  const fileHandle = await dirHandle.getFileHandle(targetName, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(JSON.stringify(payload, null, 2));
+  await writable.close();
+  return true;
+}
+
+async function performBackup(mode) {
+  if (!state.activePersonId) {
+    return false;
+  }
+  const interactive = mode === "manual";
+  const dirHandle = await ensureBackupDirectory(interactive);
+  if (!dirHandle) {
+    if (mode === "manual") {
+      setHint("请先设置备份文件夹。", "warn");
+    }
+    return false;
+  }
+  const payload = buildBackupPayload(mode);
+  try {
+    await writeBackupFile(dirHandle, payload);
+    const label = mode === "manual" ? "导出完成" : "自动备份";
+    setBackupStatus(`${label} · ${formatBackupTimestamp(new Date())} · 保留${BACKUP_LIMIT}份`, "ok");
+    if (mode === "manual") {
+      setHint("备份已导出。", "ok");
+    }
+    return true;
+  } catch (error) {
+    setBackupStatus("自动备份：失败", "warn");
+    if (mode === "manual") {
+      setHint("备份导出失败，请重试。", "warn");
+    }
+    return false;
+  }
+}
+
+function queueAutoBackup() {
+  if (state.suspendAutoBackup) {
+    return;
+  }
+  state.autoBackupQueue += 1;
+  if (state.autoBackupRunning) {
+    return;
+  }
+  flushAutoBackupQueue();
+}
+
+async function flushAutoBackupQueue() {
+  state.autoBackupRunning = true;
+  while (state.autoBackupQueue > 0) {
+    state.autoBackupQueue -= 1;
+    await performBackup("auto");
+  }
+  state.autoBackupRunning = false;
+}
+
+async function selectBackupDirectory() {
+  if (!supportsFileSystemAccess()) {
+    setBackupStatus("自动备份：浏览器不支持", "warn");
+    setHint("当前浏览器不支持选择备份文件夹。", "warn");
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({
+      id: "litepoints-backup",
+      mode: "readwrite"
+    });
+    state.backupDirectoryHandle = handle;
+    await saveBackupDirectoryHandle(handle);
+    const permission = await queryBackupPermission(handle);
+    state.backupPermission = permission;
+    if (permission !== "granted") {
+      state.backupPermission = await requestBackupPermission(handle);
+    }
+    if (state.backupPermission === "granted") {
+      setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
+      setHint("备份文件夹已设置。", "ok");
+    } else {
+      setBackupStatus("自动备份：待授权", "warn");
+      setHint("备份文件夹已选择，需授权读写。", "warn");
+    }
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      return;
+    }
+    setHint("备份文件夹设置失败。", "warn");
+  }
+}
+
+function normalizeBackupPayload(data) {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  if (!Array.isArray(data.entries)) {
+    return null;
+  }
+  let catalog = null;
+  if (data.catalog && typeof data.catalog === "object") {
+    catalog = data.catalog;
+  } else if (data.score || data.tax || data.event) {
+    catalog = {
+      score: data.score,
+      tax: data.tax,
+      event: data.event
+    };
+  }
+  if (!catalog) {
+    return null;
+  }
+  const entries = data.entries.map((entry) => ({
+    ...entry,
+    createdAt: Number.isFinite(entry.createdAt) ? entry.createdAt : Date.now()
+  }));
+  return {
+    person: data.person && typeof data.person === "object" ? data.person : null,
+    entries,
+    scoreData: catalog.score ? cloneData(catalog.score) : cloneData(state.baseScoreData),
+    taxData: catalog.tax ? cloneData(catalog.tax) : cloneData(state.baseTaxData),
+    eventData: catalog.event ? cloneData(catalog.event) : cloneData(state.baseEventData)
+  };
+}
+
+async function handleBackupImport(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+  event.target.value = "";
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const normalized = normalizeBackupPayload(parsed);
+    if (!normalized) {
+      setHint("备份文件格式不正确。", "warn");
+      return;
+    }
+    const activePerson = getActivePerson();
+    const targetName = activePerson ? activePerson.name : "当前成员";
+    const sourceName = normalized.person && normalized.person.name ? normalized.person.name : "未知成员";
+    if (!confirm(`导入后将覆盖「${targetName}」的记录与条目（来源：${sourceName}），是否继续？`)) {
+      return;
+    }
+    state.suspendAutoBackup = true;
+    state.entries = normalized.entries;
+    state.scoreData = normalized.scoreData;
+    state.taxData = normalized.taxData;
+    state.eventData = normalized.eventData;
+    state.activeCategoryId = null;
+    state.activeItemId = null;
+    state.weekCategorySelection = null;
+    saveEntries();
+    saveCatalog();
+    state.suspendAutoBackup = false;
+    renderAll();
+    setHint("备份已导入。", "ok");
+    queueAutoBackup();
+  } catch (error) {
+    setHint("备份文件解析失败。", "warn");
+  }
+}
+
 function safeId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -642,6 +1061,7 @@ function saveEntries() {
   } catch (error) {
     setHint("本地存储不可用，刷新后数据可能丢失。", "warn");
   }
+  queueAutoBackup();
 }
 
 function loadCatalog(personId) {
@@ -676,6 +1096,7 @@ function saveCatalog() {
   } catch (error) {
     setHint("本地存储不可用，刷新后自定义配置可能丢失。", "warn");
   }
+  queueAutoBackup();
 }
 
 function loadPeople() {
@@ -2045,6 +2466,7 @@ async function init() {
   elements.dateInput.value = state.selectedDate;
 
   initializePeople();
+  await initializeBackup();
 
   if (elements.personSelect) {
     elements.personSelect.addEventListener("change", (event) => setActivePerson(event.target.value));
@@ -2069,6 +2491,16 @@ async function init() {
         closePeopleModal();
       }
     });
+  }
+  if (elements.backupFolderButton) {
+    elements.backupFolderButton.addEventListener("click", selectBackupDirectory);
+  }
+  if (elements.backupExportButton) {
+    elements.backupExportButton.addEventListener("click", () => performBackup("manual"));
+  }
+  if (elements.backupImportButton && elements.backupFileInput) {
+    elements.backupImportButton.addEventListener("click", () => elements.backupFileInput.click());
+    elements.backupFileInput.addEventListener("change", handleBackupImport);
   }
 
   elements.toggleButtons.forEach((button) => {
