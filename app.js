@@ -471,7 +471,8 @@ const FALLBACK_EVENT_DATA = {
           name: "特殊活动",
           desc: "自定义活动",
           rule: "按需填写",
-          points: 1
+          points: 1,
+          direction: "score"
         }
       ]
     }
@@ -512,9 +513,12 @@ const state = {
   weekCategorySelection: null,
   backupDirectoryHandle: null,
   backupPermission: "unknown",
+  backupIndex: null,
   autoBackupQueue: 0,
   autoBackupRunning: false,
-  suspendAutoBackup: false
+  suspendAutoBackup: false,
+  yearRange: null,
+  yearRangeMode: "year"
 };
 
 const elements = {
@@ -544,12 +548,42 @@ const elements = {
   nextMonth: document.getElementById("next-month"),
   viewToggle: document.querySelector(".view-toggle"),
   viewButtons: document.querySelectorAll(".view-btn"),
+  monthSection: document.getElementById("month-section"),
+  weekSection: document.getElementById("week-section"),
+  daySection: document.getElementById("day-section"),
+  openYearPage: document.getElementById("open-year-page"),
+  openWeekPage: document.getElementById("open-week-page"),
+  yearPage: document.getElementById("year-page"),
+  yearPageClose: document.getElementById("year-page-close"),
+  yearMonthList: document.getElementById("year-month-list"),
+  weekPage: document.getElementById("week-page"),
+  weekPageClose: document.getElementById("week-page-close"),
+  weekPagePrev: document.getElementById("week-page-prev"),
+  weekPageNext: document.getElementById("week-page-next"),
+  weekPageToday: document.getElementById("week-page-today"),
+  weekPageSummaryTitle: document.getElementById("week-page-summary-title"),
+  weekPageSummary: document.getElementById("week-page-summary"),
+  weekDayList: document.getElementById("week-day-list"),
+  weekPageScoreCategoryList: document.getElementById("week-page-score-category-list"),
+  weekPageTaxCategoryList: document.getElementById("week-page-tax-category-list"),
+  weekPageDetailTitle: document.getElementById("week-page-detail-title"),
+  weekPageDetailList: document.getElementById("week-page-detail-list"),
+  yearSummaryTitle: document.getElementById("year-summary-title"),
+  yearSummary: document.getElementById("year-summary"),
+  yearScoreCategoryList: document.getElementById("year-score-category-list"),
+  yearTaxCategoryList: document.getElementById("year-tax-category-list"),
+  yearRangeStart: document.getElementById("year-range-start"),
+  yearRangeEnd: document.getElementById("year-range-end"),
+  yearRangeApply: document.getElementById("year-range-apply"),
+  yearRangeReset: document.getElementById("year-range-reset"),
+  monthSummaryTitle: document.getElementById("month-summary-title"),
+  monthSummary: document.getElementById("month-summary"),
+  monthScoreCategoryList: document.getElementById("month-score-category-list"),
+  monthTaxCategoryList: document.getElementById("month-tax-category-list"),
   selectedDateTitle: document.getElementById("selected-date-title"),
   daySummary: document.getElementById("day-summary"),
   weekSummary: document.getElementById("week-summary"),
   weekSummaryTitle: document.getElementById("week-summary-title"),
-  weekCategoryDetailTitle: document.getElementById("week-category-detail-title"),
-  weekCategoryDetailList: document.getElementById("week-category-detail-list"),
   entryList: document.getElementById("entry-list"),
   openEditor: document.getElementById("open-editor"),
   editorModal: document.getElementById("editor-modal"),
@@ -575,6 +609,24 @@ function parseDate(dateStr) {
   return new Date(year, month - 1, day);
 }
 
+function formatRangeLabel(startDate, endDate) {
+  return `${toDateString(startDate)} ~ ${toDateString(endDate)}`;
+}
+
+function getYearRange(dateStr) {
+  const date = parseDate(dateStr);
+  const start = new Date(date.getFullYear(), 0, 1);
+  const end = new Date(date.getFullYear(), 11, 31);
+  return { start, end };
+}
+
+function getMonthRange(baseDate) {
+  const date = baseDate instanceof Date ? baseDate : parseDate(baseDate);
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return { start, end };
+}
+
 function roundPoints(value) {
   return Math.round(value * 100) / 100;
 }
@@ -593,8 +645,39 @@ function formatSignedValue(value, type) {
   return `${sign}${formatPoints(safe)}`;
 }
 
+function getEntryEffect(entry) {
+  if (!entry) {
+    return "score";
+  }
+  if (entry.type === "tax") {
+    return "tax";
+  }
+  if (entry.type === "score") {
+    return "score";
+  }
+  if (entry.type === "event") {
+    return entry.effect === "tax" ? "tax" : "score";
+  }
+  return "score";
+}
+
 function cloneData(data) {
   return JSON.parse(JSON.stringify(data));
+}
+
+function normalizeEventData(data) {
+  if (!data || !Array.isArray(data.categories)) {
+    return data;
+  }
+  data.categories.forEach((category) => {
+    if (!Array.isArray(category.items)) {
+      return;
+    }
+    category.items.forEach((item) => {
+      item.direction = item.direction === "tax" ? "tax" : "score";
+    });
+  });
+  return data;
 }
 
 function setHint(message, tone) {
@@ -695,6 +778,20 @@ async function requestBackupPermission(handle) {
   }
 }
 
+async function resolveBackupDirectoryHandle(handle) {
+  if (!handle || handle.kind !== "directory") {
+    return null;
+  }
+  if (handle.name === "user_data") {
+    return handle;
+  }
+  try {
+    return await handle.getDirectoryHandle("user_data", { create: true });
+  } catch (error) {
+    return handle;
+  }
+}
+
 async function initializeBackup() {
   if (!elements.backupStatus) {
     return;
@@ -703,20 +800,24 @@ async function initializeBackup() {
     setBackupStatus("自动备份：浏览器不支持", "warn");
     return;
   }
-  const storedHandle = await loadBackupDirectoryHandle();
+  let storedHandle = await loadBackupDirectoryHandle();
   if (!storedHandle) {
     setBackupStatus("自动备份：未设置", "warn");
     return;
   }
-  state.backupDirectoryHandle = storedHandle;
-  const permission = await queryBackupPermission(storedHandle);
-  state.backupPermission = permission;
-  if (permission === "granted") {
-    setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
-  } else if (permission === "prompt") {
-    setBackupStatus("自动备份：待授权", "warn");
-  } else {
-    setBackupStatus("自动备份：未授权", "warn");
+  const resolvedHandle = await resolveBackupDirectoryHandle(storedHandle);
+  if (!resolvedHandle) {
+    setBackupStatus("自动备份：未设置", "warn");
+    return;
+  }
+  state.backupDirectoryHandle = resolvedHandle;
+  if (resolvedHandle !== storedHandle) {
+    await saveBackupDirectoryHandle(resolvedHandle);
+  }
+  state.backupPermission = await queryBackupPermission(resolvedHandle);
+  updateBackupStatusSummary();
+  if (state.backupPermission === "granted") {
+    await syncBackupIndex(resolvedHandle);
   }
 }
 
@@ -728,28 +829,32 @@ async function ensureBackupDirectory(interactive) {
   let handle = state.backupDirectoryHandle;
   if (!handle) {
     handle = await loadBackupDirectoryHandle();
-    if (handle) {
-      state.backupDirectoryHandle = handle;
-    }
   }
   if (!handle) {
     setBackupStatus("自动备份：未设置", "warn");
     return null;
   }
 
-  let permission = await queryBackupPermission(handle);
+  const resolvedHandle = await resolveBackupDirectoryHandle(handle);
+  if (!resolvedHandle) {
+    setBackupStatus("自动备份：未设置", "warn");
+    return null;
+  }
+  if (resolvedHandle !== handle) {
+    state.backupDirectoryHandle = resolvedHandle;
+    await saveBackupDirectoryHandle(resolvedHandle);
+  } else {
+    state.backupDirectoryHandle = handle;
+  }
+
+  let permission = await queryBackupPermission(state.backupDirectoryHandle);
   if (permission !== "granted" && interactive) {
-    permission = await requestBackupPermission(handle);
+    permission = await requestBackupPermission(state.backupDirectoryHandle);
   }
   state.backupPermission = permission;
+  updateBackupStatusSummary();
   if (permission === "granted") {
-    setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
-    return handle;
-  }
-  if (permission === "prompt") {
-    setBackupStatus("自动备份：待授权", "warn");
-  } else {
-    setBackupStatus("自动备份：未授权", "warn");
+    return state.backupDirectoryHandle;
   }
   return null;
 }
@@ -761,6 +866,24 @@ function formatBackupTimestamp(date) {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function formatBackupFileStamp(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  const ms = String(date.getMilliseconds()).padStart(3, "0");
+  return `${year}${month}${day}_${hours}${minutes}${seconds}${ms}`;
+}
+
+function sanitizeFileName(value) {
+  const safe = String(value || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, "_");
+  return safe || "未命名";
 }
 
 function buildBackupPayload(reason) {
@@ -783,30 +906,236 @@ function buildBackupPayload(reason) {
   };
 }
 
-function getBackupFilePrefix(personId) {
-  return `${BACKUP_PREFIX}_${personId}_`;
+function buildBackupFileName(personName, timestamp) {
+  const safeName = sanitizeFileName(personName);
+  const stamp = formatBackupFileStamp(new Date(timestamp));
+  return `${BACKUP_PREFIX}_${safeName}_${stamp}.json`;
 }
 
-function parseBackupTimestamp(name, prefix) {
-  const raw = name.slice(prefix.length, -5);
-  const stamp = Number(raw);
-  return Number.isFinite(stamp) ? stamp : 0;
+function isBackupFileName(name) {
+  return name.startsWith(BACKUP_PREFIX) && name.endsWith(".json");
 }
 
-async function listBackups(dirHandle, personId) {
-  const prefix = getBackupFilePrefix(personId);
-  const backups = [];
+async function readBackupMeta(fileHandle, name) {
+  try {
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data || data.type !== "litepoints-backup") {
+      return null;
+    }
+    const person = data.person && typeof data.person === "object" ? data.person : {};
+    const personId = typeof person.id === "string" ? person.id : null;
+    const personName = typeof person.name === "string" ? person.name : "未命名";
+    const parsedStamp = Date.parse(data.exportedAt);
+    const stamp = Number.isFinite(parsedStamp) ? parsedStamp : file.lastModified || 0;
+    return {
+      name,
+      stamp,
+      personId,
+      personName
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+async function buildBackupIndex(dirHandle) {
+  const index = {
+    people: {},
+    syncedAt: Date.now()
+  };
   try {
     for await (const [name, handle] of dirHandle.entries()) {
-      if (!name.startsWith(prefix) || !name.endsWith(".json")) {
+      if (!isBackupFileName(name)) {
         continue;
       }
       if (handle.kind !== "file") {
         continue;
       }
+      const meta = await readBackupMeta(handle, name);
+      if (!meta) {
+        continue;
+      }
+      const key = meta.personId || `name:${meta.personName}`;
+      if (!index.people[key]) {
+        index.people[key] = {
+          id: meta.personId,
+          name: meta.personName,
+          count: 0,
+          lastStamp: 0,
+          files: []
+        };
+      }
+      const target = index.people[key];
+      target.count += 1;
+      target.files.push({ name: meta.name, stamp: meta.stamp });
+      if (meta.stamp > target.lastStamp) {
+        target.lastStamp = meta.stamp;
+      }
+    }
+  } catch (error) {
+    return index;
+  }
+
+  Object.values(index.people).forEach((info) => {
+    info.files.sort((a, b) => a.stamp - b.stamp);
+  });
+  return index;
+}
+
+function getBackupInfo(personId) {
+  if (!state.backupIndex || !state.backupIndex.people || !personId) {
+    return null;
+  }
+  return state.backupIndex.people[personId] || null;
+}
+
+function getBackupInfoLabel(personId) {
+  if (!supportsFileSystemAccess()) {
+    return "备份状态：浏览器不支持";
+  }
+  if (!state.backupDirectoryHandle) {
+    return "备份状态：未设置";
+  }
+  if (state.backupPermission !== "granted") {
+    return "备份状态：未同步";
+  }
+  const info = getBackupInfo(personId);
+  if (!info || info.count === 0) {
+    return "备份状态：暂无";
+  }
+  const lastLabel = info.lastStamp ? formatBackupTimestamp(new Date(info.lastStamp)) : "未知时间";
+  return `备份 ${info.count} 份 · 最近 ${lastLabel}`;
+}
+
+function syncPeopleFromBackupIndex(index) {
+  if (!index || !index.people) {
+    return false;
+  }
+  let changed = false;
+  const peopleMap = new Map(state.people.map((person) => [person.id, person]));
+
+  Object.values(index.people).forEach((info) => {
+    if (!info.id) {
+      return;
+    }
+    let person = peopleMap.get(info.id);
+    if (!person) {
+      person = {
+        id: info.id,
+        name: info.name || "未命名"
+      };
+      state.people.push(person);
+      peopleMap.set(info.id, person);
+      changed = true;
+      return;
+    }
+    if (info.name && (!person.name || person.name === "未命名")) {
+      person.name = info.name;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    savePeople();
+    renderPersonSelect();
+  }
+  if (!state.people.some((person) => person.id === state.activePersonId)) {
+    state.activePersonId = state.people[0] ? state.people[0].id : null;
+    if (state.activePersonId) {
+      try {
+        localStorage.setItem(ACTIVE_PERSON_KEY, state.activePersonId);
+      } catch (error) {
+        return changed;
+      }
+    }
+  }
+  return changed;
+}
+
+function updateBackupStatusSummary() {
+  if (!elements.backupStatus) {
+    return;
+  }
+  if (!supportsFileSystemAccess()) {
+    setBackupStatus("自动备份：浏览器不支持", "warn");
+    return;
+  }
+  if (!state.backupDirectoryHandle) {
+    setBackupStatus("自动备份：未设置", "warn");
+    return;
+  }
+  if (state.backupPermission === "prompt") {
+    setBackupStatus("自动备份：待授权", "warn");
+    return;
+  }
+  if (state.backupPermission !== "granted") {
+    setBackupStatus("自动备份：未授权", "warn");
+    return;
+  }
+  const activePerson = getActivePerson();
+  const personLabel = activePerson ? activePerson.name : "当前成员";
+  const info = activePerson ? getBackupInfo(activePerson.id) : null;
+  if (!info || info.count === 0) {
+    setBackupStatus(`自动备份：${personLabel} · 当前无备份 · 保留${BACKUP_LIMIT}份`, "ok");
+    return;
+  }
+  const lastLabel = info.lastStamp ? formatBackupTimestamp(new Date(info.lastStamp)) : "未知时间";
+  setBackupStatus(`自动备份：${personLabel} · ${info.count}份 · 最近 ${lastLabel} · 保留${BACKUP_LIMIT}份`, "ok");
+}
+
+async function syncBackupIndex(dirHandle) {
+  const handle = dirHandle || (await ensureBackupDirectory(false));
+  if (!handle || state.backupPermission !== "granted") {
+    state.backupIndex = null;
+    updateBackupStatusSummary();
+    return null;
+  }
+  const activeBefore = state.activePersonId;
+  const index = await buildBackupIndex(handle);
+  state.backupIndex = index;
+  const changed = syncPeopleFromBackupIndex(index);
+  if (state.activePersonId && state.activePersonId !== activeBefore) {
+    setActivePerson(state.activePersonId);
+  }
+  if (
+    changed ||
+    (elements.peopleModal && elements.peopleModal.classList.contains("open"))
+  ) {
+    renderPeopleManager();
+  }
+  updateBackupStatusSummary();
+  return index;
+}
+
+async function listBackups(dirHandle, personId) {
+  const backups = [];
+  const activePerson = getActivePerson();
+  const activeName = activePerson ? activePerson.name : null;
+  try {
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (!isBackupFileName(name)) {
+        continue;
+      }
+      if (handle.kind !== "file") {
+        continue;
+      }
+      const meta = await readBackupMeta(handle, name);
+      if (!meta) {
+        continue;
+      }
+      if (personId) {
+        if (meta.personId && meta.personId !== personId) {
+          continue;
+        }
+        if (!meta.personId && activeName && meta.personName !== activeName) {
+          continue;
+        }
+      }
       backups.push({
-        name,
-        stamp: parseBackupTimestamp(name, prefix)
+        name: meta.name,
+        stamp: meta.stamp
       });
     }
   } catch (error) {
@@ -821,10 +1150,11 @@ async function writeBackupFile(dirHandle, payload) {
   if (!personId) {
     return false;
   }
+  const person = getActivePerson();
+  const personName = person ? person.name : "未命名";
   const backups = await listBackups(dirHandle, personId);
-  const prefix = getBackupFilePrefix(personId);
   const timestamp = Date.now();
-  let targetName = `${prefix}${timestamp}.json`;
+  let targetName = buildBackupFileName(personName, timestamp);
 
   if (backups.length >= BACKUP_LIMIT) {
     const removeCount = backups.length - (BACKUP_LIMIT - 1);
@@ -868,8 +1198,7 @@ async function performBackup(mode) {
   const payload = buildBackupPayload(mode);
   try {
     await writeBackupFile(dirHandle, payload);
-    const label = mode === "manual" ? "导出完成" : "自动备份";
-    setBackupStatus(`${label} · ${formatBackupTimestamp(new Date())} · 保留${BACKUP_LIMIT}份`, "ok");
+    await syncBackupIndex(dirHandle);
     if (mode === "manual") {
       setHint("备份已导出。", "ok");
     }
@@ -910,22 +1239,26 @@ async function selectBackupDirectory() {
     return;
   }
   try {
-    const handle = await window.showDirectoryPicker({
+    const pickedHandle = await window.showDirectoryPicker({
       id: "litepoints-backup",
       mode: "readwrite"
     });
+    const handle = await resolveBackupDirectoryHandle(pickedHandle);
+    if (!handle) {
+      setHint("备份文件夹设置失败。", "warn");
+      return;
+    }
     state.backupDirectoryHandle = handle;
     await saveBackupDirectoryHandle(handle);
-    const permission = await queryBackupPermission(handle);
-    state.backupPermission = permission;
-    if (permission !== "granted") {
+    state.backupPermission = await queryBackupPermission(handle);
+    if (state.backupPermission !== "granted") {
       state.backupPermission = await requestBackupPermission(handle);
     }
+    updateBackupStatusSummary();
     if (state.backupPermission === "granted") {
-      setBackupStatus(`自动备份：已启用（保留${BACKUP_LIMIT}份）`, "ok");
+      await syncBackupIndex(handle);
       setHint("备份文件夹已设置。", "ok");
     } else {
-      setBackupStatus("自动备份：待授权", "warn");
       setHint("备份文件夹已选择，需授权读写。", "warn");
     }
   } catch (error) {
@@ -956,16 +1289,27 @@ function normalizeBackupPayload(data) {
   if (!catalog) {
     return null;
   }
-  const entries = data.entries.map((entry) => ({
-    ...entry,
-    createdAt: Number.isFinite(entry.createdAt) ? entry.createdAt : Date.now()
-  }));
+  const entries = data.entries.map((entry) => {
+    const effect =
+      entry.type === "tax"
+        ? "tax"
+        : entry.type === "event"
+          ? entry.effect === "tax"
+            ? "tax"
+            : "score"
+          : "score";
+    return {
+      ...entry,
+      effect,
+      createdAt: Number.isFinite(entry.createdAt) ? entry.createdAt : Date.now()
+    };
+  });
   return {
     person: data.person && typeof data.person === "object" ? data.person : null,
     entries,
     scoreData: catalog.score ? cloneData(catalog.score) : cloneData(state.baseScoreData),
     taxData: catalog.tax ? cloneData(catalog.tax) : cloneData(state.baseTaxData),
-    eventData: catalog.event ? cloneData(catalog.event) : cloneData(state.baseEventData)
+    eventData: normalizeEventData(catalog.event ? cloneData(catalog.event) : cloneData(state.baseEventData))
   };
 }
 
@@ -1125,6 +1469,9 @@ function getActivePerson() {
 }
 
 function updateDataStatus(hasCustom) {
+  if (!elements.dataStatus) {
+    return;
+  }
   const person = getActivePerson();
   const personName = person ? person.name : "未命名";
   const dataSource = hasCustom
@@ -1214,7 +1561,9 @@ function setActivePerson(personId) {
   const catalog = loadCatalog(personId);
   state.scoreData = catalog && catalog.score ? catalog.score : cloneData(state.baseScoreData);
   state.taxData = catalog && catalog.tax ? catalog.tax : cloneData(state.baseTaxData);
-  state.eventData = catalog && catalog.event ? catalog.event : cloneData(state.baseEventData);
+  state.eventData = normalizeEventData(
+    catalog && catalog.event ? catalog.event : cloneData(state.baseEventData)
+  );
   state.entries = loadEntries(personId);
   state.activeCategoryId = null;
   state.activeItemId = null;
@@ -1223,6 +1572,7 @@ function setActivePerson(personId) {
   renderPersonSelect();
   updateDataStatus(!!catalog);
   renderAll();
+  updateBackupStatusSummary();
 }
 
 function openPeopleModal() {
@@ -1255,6 +1605,11 @@ function renderPeopleManager() {
     input.dataset.personId = person.id;
     label.appendChild(input);
     info.appendChild(label);
+
+    const backupMeta = document.createElement("div");
+    backupMeta.className = "people-meta";
+    backupMeta.textContent = getBackupInfoLabel(person.id);
+    info.appendChild(backupMeta);
 
     if (person.id === state.activePersonId) {
       const tag = document.createElement("div");
@@ -1465,7 +1820,14 @@ function renderItems() {
 
     const meta = document.createElement("div");
     meta.className = "item-meta";
-    meta.textContent = `${formatPoints(item.points)} 积分 · ${item.desc || ""}`;
+    const metaParts = [`${formatPoints(item.points)} 积分`];
+    if (state.activeType === "event") {
+      metaParts.push(item.direction === "tax" ? "税收活动" : "得分活动");
+    }
+    if (item.desc) {
+      metaParts.push(item.desc);
+    }
+    meta.textContent = metaParts.join(" · ");
 
     const rule = document.createElement("div");
     rule.className = "item-meta";
@@ -1497,7 +1859,13 @@ function renderSelectedItem() {
   }
 
   const typeLabel =
-    state.activeType === "score" ? "得分" : state.activeType === "tax" ? "税收" : "活动";
+    state.activeType === "score"
+      ? "得分"
+      : state.activeType === "tax"
+        ? "税收"
+        : item.direction === "tax"
+          ? "活动税收"
+          : "活动得分";
   const cadence = item.cadence ? ` · ${item.cadence}` : "";
   const extra = [item.desc, item.rule].filter(Boolean).join(" · ");
 
@@ -1530,7 +1898,7 @@ function getTotalsForDate(dateStr) {
   let score = 0;
   let tax = 0;
   dayEntries.forEach((entry) => {
-    if (entry.type === "score" || entry.type === "event") {
+    if (getEntryEffect(entry) === "score") {
       score += entry.total;
     } else {
       tax += entry.total;
@@ -1559,7 +1927,7 @@ function getTotalsForRange(startDate, endDate) {
   state.entries.forEach((entry) => {
     const entryDate = parseDate(entry.date);
     if (entryDate >= startDate && entryDate <= endDate) {
-      if (entry.type === "score" || entry.type === "event") {
+      if (getEntryEffect(entry) === "score") {
         score += entry.total;
       } else {
         tax += entry.total;
@@ -1590,6 +1958,77 @@ function renderSummary(container, totals) {
   `;
 }
 
+function getScoreCategoryTotalsForRange(startDate, endDate) {
+  const scoreTotals = getCategoryTotalsForRange(startDate, endDate, "score").map((item) => ({
+    ...item,
+    sourceType: "score"
+  }));
+  const eventTotals = getCategoryTotalsForRange(startDate, endDate, "event", "score").map((item) => ({
+    ...item,
+    sourceType: "event"
+  }));
+  return scoreTotals.concat(eventTotals);
+}
+
+function getTaxCategoryTotalsForRange(startDate, endDate) {
+  const taxTotals = getCategoryTotalsForRange(startDate, endDate, "tax").map((item) => ({
+    ...item,
+    sourceType: "tax"
+  }));
+  const eventTotals = getCategoryTotalsForRange(startDate, endDate, "event", "tax").map((item) => ({
+    ...item,
+    sourceType: "event"
+  }));
+  return taxTotals.concat(eventTotals);
+}
+
+function renderCategoryList(container, totals, type, limit) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = "";
+  const typeLabel = type === "tax" ? "税收" : "得分";
+  const visible = totals.filter((item) => item.total > 0);
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="item-meta">暂无${typeLabel}记录。</div>`;
+    return;
+  }
+  const sorted = visible.sort((a, b) => b.total - a.total);
+  const display = limit ? sorted.slice(0, limit) : sorted;
+  display.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "category-row";
+
+    const name = document.createElement("div");
+    name.className = "category-name";
+    const label = item.sourceType === "event" ? `活动 · ${item.name}` : item.name;
+    name.textContent = label;
+
+    const value = document.createElement("div");
+    value.className = "category-value";
+    if (type === "tax") {
+      value.classList.add("tax");
+    }
+    value.textContent = formatSignedValue(item.total, type);
+
+    row.appendChild(name);
+    row.appendChild(value);
+    container.appendChild(row);
+  });
+
+  if (sorted.length > display.length) {
+    const more = document.createElement("div");
+    more.className = "item-meta";
+    more.textContent = `还有 ${sorted.length - display.length} 项未展开`;
+    container.appendChild(more);
+  }
+}
+
+function renderCategoryBreakdown(scoreContainer, taxContainer, startDate, endDate, limit) {
+  renderCategoryList(scoreContainer, getScoreCategoryTotalsForRange(startDate, endDate), "score", limit);
+  renderCategoryList(taxContainer, getTaxCategoryTotalsForRange(startDate, endDate), "tax", limit);
+}
+
 function renderEntryList(dateStr) {
   const entries = state.entries
     .filter((entry) => entry.date === dateStr)
@@ -1602,18 +2041,33 @@ function renderEntryList(dateStr) {
   }
 
   entries.forEach((entry) => {
-    const card = document.createElement("div");
-    card.className = "entry-card";
+    const line = document.createElement("div");
+    line.className = "entry-line";
 
-    const row = document.createElement("div");
-    row.className = "entry-row";
+    const info = document.createElement("div");
+    info.className = "entry-info";
 
-    const title = document.createElement("div");
-    title.className = "entry-title";
-    const tagClass =
-      entry.type === "tax" ? "entry-tag tax" : entry.type === "event" ? "entry-tag event" : "entry-tag";
-    const typeLabel = entry.type === "tax" ? "税收" : entry.type === "event" ? "活动" : "得分";
-    title.innerHTML = `${entry.itemName}<span class="${tagClass}">${typeLabel}</span>`;
+    const name = document.createElement("div");
+    name.className = "entry-name";
+    name.textContent = entry.itemName;
+
+    const meta = document.createElement("div");
+    meta.className = "entry-meta";
+    meta.textContent = `${entry.categoryName} · 倍数 ${formatPoints(entry.multiplier)}`;
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "entry-actions";
+
+    const effect = getEntryEffect(entry);
+    const value = document.createElement("div");
+    value.className = "entry-value";
+    if (effect === "tax") {
+      value.classList.add("tax");
+    }
+    value.textContent = formatSignedValue(entry.total, effect);
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
@@ -1625,25 +2079,322 @@ function renderEntryList(dateStr) {
       renderAll();
     });
 
-    row.appendChild(title);
-    row.appendChild(removeButton);
+    actions.appendChild(value);
+    actions.appendChild(removeButton);
 
-    const meta = document.createElement("div");
-    meta.className = "entry-meta";
-    const signedTotal = entry.type === "tax" ? -entry.total : entry.total;
-    meta.textContent = `${entry.categoryName} · 倍数 ${formatPoints(entry.multiplier)} · 合计 ${signedTotal >= 0 ? "+" : ""}${formatPoints(signedTotal)}`;
-
-    const detail = document.createElement("div");
-    detail.className = "entry-meta";
-    detail.textContent = [entry.desc, entry.rule].filter(Boolean).join(" · ");
-
-    card.appendChild(row);
-    card.appendChild(meta);
-    if (detail.textContent) {
-      card.appendChild(detail);
-    }
-    elements.entryList.appendChild(card);
+    line.appendChild(info);
+    line.appendChild(actions);
+    elements.entryList.appendChild(line);
   });
+}
+
+function updateInfoVisibility() {
+  if (elements.monthSection) {
+    elements.monthSection.hidden = state.viewMode !== "month";
+  }
+  if (elements.weekSection) {
+    elements.weekSection.hidden = state.viewMode !== "week";
+  }
+}
+
+function updateYearRangeInputs() {
+  if (!elements.yearRangeStart || !elements.yearRangeEnd || !state.yearRange) {
+    return;
+  }
+  const startValue = toDateString(state.yearRange.start);
+  const endValue = toDateString(state.yearRange.end);
+  if (elements.yearRangeStart.value !== startValue) {
+    elements.yearRangeStart.value = startValue;
+  }
+  if (elements.yearRangeEnd.value !== endValue) {
+    elements.yearRangeEnd.value = endValue;
+  }
+}
+
+function applyYearRange() {
+  if (!elements.yearRangeStart || !elements.yearRangeEnd) {
+    return;
+  }
+  const startStr = elements.yearRangeStart.value;
+  const endStr = elements.yearRangeEnd.value;
+  if (!startStr || !endStr) {
+    setHint("请填写完整的年度范围。", "warn");
+    return;
+  }
+  const startDate = parseDate(startStr);
+  const endDate = parseDate(endStr);
+  if (startDate > endDate) {
+    setHint("年度范围起始不能晚于结束。", "warn");
+    return;
+  }
+  state.yearRange = { start: startDate, end: endDate };
+  state.yearRangeMode = "custom";
+  renderDetails();
+}
+
+function resetYearRange() {
+  if (!state.selectedDate) {
+    return;
+  }
+  state.yearRange = getYearRange(state.selectedDate);
+  state.yearRangeMode = "year";
+  renderDetails();
+}
+
+function renderYearInfo() {
+  if (!state.selectedDate || !elements.yearSummary || !elements.yearSummaryTitle) {
+    return;
+  }
+  if (!state.yearRange || state.yearRangeMode === "year") {
+    state.yearRange = getYearRange(state.selectedDate);
+  }
+  updateYearRangeInputs();
+  const { start, end } = state.yearRange;
+  const totals = getTotalsForRange(start, end);
+  const rangeLabel = formatRangeLabel(start, end);
+  const modeLabel = state.yearRangeMode === "custom" ? "自定义范围" : `${start.getFullYear()}年`;
+  elements.yearSummaryTitle.textContent = `${modeLabel}统计 · ${rangeLabel}`;
+  renderSummary(elements.yearSummary, totals);
+  renderCategoryBreakdown(elements.yearScoreCategoryList, elements.yearTaxCategoryList, start, end, 6);
+  renderYearMonthList();
+}
+
+function renderMonthInfo() {
+  if (!elements.monthSummary || !elements.monthSummaryTitle) {
+    return;
+  }
+  const monthBase = state.currentMonth || parseDate(state.selectedDate);
+  const range = getMonthRange(monthBase);
+  const totals = getTotalsForRange(range.start, range.end);
+  const rangeLabel = formatRangeLabel(range.start, range.end);
+  elements.monthSummaryTitle.textContent = `${range.start.getFullYear()}年${range.start.getMonth() + 1}月统计 · ${rangeLabel}`;
+  renderSummary(elements.monthSummary, totals);
+  renderCategoryBreakdown(elements.monthScoreCategoryList, elements.monthTaxCategoryList, range.start, range.end, 4);
+}
+
+function renderWeekInfo() {
+  if (!state.selectedDate || !elements.weekSummary || !elements.weekSummaryTitle) {
+    return;
+  }
+  const range = getWeekRange(state.selectedDate);
+  const totals = getTotalsForRange(range.start, range.end);
+  const rangeLabel = formatRangeLabel(range.start, range.end);
+  elements.weekSummaryTitle.textContent = `本周统计 · ${rangeLabel}`;
+  renderSummary(elements.weekSummary, totals);
+}
+
+function renderYearMonthList() {
+  if (!elements.yearMonthList || !state.yearRange) {
+    return;
+  }
+  elements.yearMonthList.innerHTML = "";
+  const start = new Date(state.yearRange.start.getFullYear(), state.yearRange.start.getMonth(), 1);
+  const end = new Date(state.yearRange.end.getFullYear(), state.yearRange.end.getMonth(), 1);
+  const cursor = new Date(start);
+  let hasRows = false;
+  while (cursor <= end) {
+    const monthRange = getMonthRange(cursor);
+    const rangeStart = monthRange.start < state.yearRange.start ? state.yearRange.start : monthRange.start;
+    const rangeEnd = monthRange.end > state.yearRange.end ? state.yearRange.end : monthRange.end;
+    const totals = getTotalsForRange(rangeStart, rangeEnd);
+
+    const row = document.createElement("div");
+    row.className = "month-line";
+
+    const label = document.createElement("div");
+    label.className = "month-label";
+    label.textContent = `${cursor.getFullYear()}年${cursor.getMonth() + 1}月`;
+
+    const values = document.createElement("div");
+    values.className = "month-values";
+
+    const score = document.createElement("span");
+    score.className = "score";
+    score.textContent = `+${formatPoints(totals.score)}`;
+
+    const tax = document.createElement("span");
+    tax.className = "tax";
+    tax.textContent = `-${formatPoints(totals.tax)}`;
+
+    const net = document.createElement("span");
+    net.textContent = `${totals.net >= 0 ? "+" : ""}${formatPoints(totals.net)}`;
+
+    values.appendChild(score);
+    values.appendChild(tax);
+    values.appendChild(net);
+
+    row.appendChild(label);
+    row.appendChild(values);
+    elements.yearMonthList.appendChild(row);
+    hasRows = true;
+
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  if (!hasRows) {
+    elements.yearMonthList.innerHTML = `<div class="item-meta">暂无记录。</div>`;
+  }
+}
+
+function renderWeekDayList(range) {
+  if (!elements.weekDayList) {
+    return;
+  }
+  elements.weekDayList.innerHTML = "";
+  const todayStr = toDateString(new Date());
+  for (let index = 0; index < 7; index += 1) {
+    const date = new Date(range.start);
+    date.setDate(range.start.getDate() + index);
+    const dateStr = toDateString(date);
+    const totals = getTotalsForDate(dateStr);
+
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "week-day-row";
+    row.dataset.date = dateStr;
+    if (dateStr === state.selectedDate) {
+      row.classList.add("is-selected");
+    }
+
+    const label = document.createElement("div");
+    label.className = "week-day-label";
+    const todayLabel = dateStr === todayStr ? " · 今天" : "";
+    label.textContent = `周${WEEKDAY_LABELS[index]} ${date.getMonth() + 1}.${date.getDate()}${todayLabel}`;
+
+    const values = document.createElement("div");
+    values.className = "week-day-values";
+
+    const score = document.createElement("span");
+    score.className = "score";
+    score.textContent = `+${formatPoints(totals.score)}`;
+
+    const tax = document.createElement("span");
+    tax.className = "tax";
+    tax.textContent = `-${formatPoints(totals.tax)}`;
+
+    const net = document.createElement("span");
+    net.textContent = `${totals.net >= 0 ? "+" : ""}${formatPoints(totals.net)}`;
+
+    values.appendChild(score);
+    values.appendChild(tax);
+    values.appendChild(net);
+
+    row.appendChild(label);
+    row.appendChild(values);
+    elements.weekDayList.appendChild(row);
+  }
+}
+
+function handleWeekDaySelect(event) {
+  const button = event.target.closest(".week-day-row");
+  if (!button) {
+    return;
+  }
+  const dateStr = button.dataset.date;
+  if (!dateStr) {
+    return;
+  }
+  const next = parseDate(dateStr);
+  state.selectedDate = dateStr;
+  state.currentMonth = new Date(next.getFullYear(), next.getMonth(), 1);
+  renderAll();
+}
+
+function renderWeekPage() {
+  if (!elements.weekPage || !state.selectedDate) {
+    return;
+  }
+  const range = getWeekRange(state.selectedDate);
+  const totals = getTotalsForRange(range.start, range.end);
+  const rangeLabel = formatRangeLabel(range.start, range.end);
+  if (elements.weekPageSummaryTitle) {
+    elements.weekPageSummaryTitle.textContent = `周统计 · ${rangeLabel}`;
+  }
+  if (elements.weekPageSummary) {
+    renderSummary(elements.weekPageSummary, totals);
+  }
+  renderWeekDayList(range);
+  if (elements.weekPageScoreCategoryList) {
+    renderWeekCategorySummary("score", elements.weekPageScoreCategoryList, range.start, range.end, {
+      includeEvent: true
+    });
+  }
+  if (elements.weekPageTaxCategoryList) {
+    renderWeekCategorySummary("tax", elements.weekPageTaxCategoryList, range.start, range.end, {
+      includeEvent: true
+    });
+  }
+  renderWeekCategoryDetails();
+}
+
+function shiftWeek(offset) {
+  if (!state.selectedDate) {
+    return;
+  }
+  const selected = parseDate(state.selectedDate);
+  selected.setDate(selected.getDate() + offset * 7);
+  state.selectedDate = toDateString(selected);
+  state.currentMonth = new Date(selected.getFullYear(), selected.getMonth(), 1);
+  renderAll();
+}
+
+function goToCurrentWeek() {
+  const today = new Date();
+  state.selectedDate = toDateString(today);
+  state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  renderAll();
+}
+
+function openYearPage() {
+  if (!elements.yearPage) {
+    return;
+  }
+  elements.yearPage.classList.add("open");
+  elements.yearPage.setAttribute("aria-hidden", "false");
+  renderYearInfo();
+  renderYearMonthList();
+}
+
+function closeYearPage() {
+  if (!elements.yearPage) {
+    return;
+  }
+  elements.yearPage.classList.remove("open");
+  elements.yearPage.setAttribute("aria-hidden", "true");
+}
+
+function openWeekPage() {
+  if (!elements.weekPage) {
+    return;
+  }
+  elements.weekPage.classList.add("open");
+  elements.weekPage.setAttribute("aria-hidden", "false");
+  renderWeekPage();
+}
+
+function closeWeekPage() {
+  if (!elements.weekPage) {
+    return;
+  }
+  elements.weekPage.classList.remove("open");
+  elements.weekPage.setAttribute("aria-hidden", "true");
+}
+
+function renderDayInfo() {
+  if (!state.selectedDate) {
+    return;
+  }
+  if (elements.dateInput.value !== state.selectedDate) {
+    elements.dateInput.value = state.selectedDate;
+  }
+  const dateObj = parseDate(state.selectedDate);
+  const weekday = WEEKDAY_FULL[dateObj.getDay()];
+  const todayStr = toDateString(new Date());
+  const todayLabel = state.selectedDate === todayStr ? " · 今天" : "";
+  elements.selectedDateTitle.textContent = `${state.selectedDate} 周${weekday}${todayLabel}`;
+
+  const dayTotals = getTotalsForDate(state.selectedDate);
+  renderSummary(elements.daySummary, dayTotals);
+  renderEntryList(state.selectedDate);
 }
 
 function renderCalendar() {
@@ -1720,7 +2471,7 @@ function setViewVisibility(isWeek) {
   }
 }
 
-function getCategoryTotalsForRange(startDate, endDate, type) {
+function getCategoryTotalsForRange(startDate, endDate, type, direction) {
   const data = getDataByType(type);
   if (!data || !Array.isArray(data.categories)) {
     return [];
@@ -1733,6 +2484,9 @@ function getCategoryTotalsForRange(startDate, endDate, type) {
   const totalMap = new Map(totals.map((item) => [item.id, item]));
   state.entries.forEach((entry) => {
     if (entry.type !== type) {
+      return;
+    }
+    if (type === "event" && direction && getEntryEffect(entry) !== direction) {
       return;
     }
     const entryDate = parseDate(entry.date);
@@ -1749,13 +2503,44 @@ function getCategoryTotalsForRange(startDate, endDate, type) {
   return totals;
 }
 
-function renderWeekCategorySummary(type, container, startDate, endDate) {
+function renderWeekCategorySummary(type, container, startDate, endDate, options = {}) {
   const typeLabel = type === "tax" ? "税收" : "得分";
-  const totals = getCategoryTotalsForRange(startDate, endDate, type);
-  if (state.weekCategorySelection && state.weekCategorySelection.type === type) {
-    const exists = totals.some((category) => category.id === state.weekCategorySelection.categoryId);
-    if (!exists) {
-      state.weekCategorySelection = null;
+  const baseTotals = getCategoryTotalsForRange(startDate, endDate, type).map((item) => ({
+    ...item,
+    sourceType: type
+  }));
+  const eventTotals = options.includeEvent
+    ? getCategoryTotalsForRange(startDate, endDate, "event", type).map((item) => ({
+        ...item,
+        sourceType: "event",
+        direction: type
+      }))
+    : [];
+  const totals = baseTotals.concat(eventTotals);
+
+  const selection = state.weekCategorySelection;
+  const matchesSelection = (category) => {
+    if (!selection) {
+      return false;
+    }
+    if (category.sourceType === "event") {
+      return (
+        selection.type === "event" &&
+        selection.categoryId === category.id &&
+        selection.direction === type
+      );
+    }
+    return selection.type === type && selection.categoryId === category.id;
+  };
+
+  if (selection) {
+    const selectionMatchesList =
+      selection.type === type || (selection.type === "event" && selection.direction === type);
+    if (selectionMatchesList) {
+      const exists = totals.some(matchesSelection);
+      if (!exists) {
+        state.weekCategorySelection = null;
+      }
     }
   }
 
@@ -1774,19 +2559,18 @@ function renderWeekCategorySummary(type, container, startDate, endDate) {
     if (!category.total) {
       card.classList.add("is-zero");
     }
-    if (
-      state.weekCategorySelection &&
-      state.weekCategorySelection.type === type &&
-      state.weekCategorySelection.categoryId === category.id
-    ) {
+    if (matchesSelection(category)) {
       card.classList.add("is-active");
     }
-    card.dataset.type = type;
+    card.dataset.type = category.sourceType === "event" ? "event" : type;
     card.dataset.categoryId = category.id;
+    if (category.sourceType === "event") {
+      card.dataset.direction = type;
+    }
 
     const name = document.createElement("div");
     name.className = "week-category-name";
-    name.textContent = category.name;
+    name.textContent = category.sourceType === "event" ? `活动 · ${category.name}` : category.name;
 
     const value = document.createElement("div");
     value.className = "week-category-value";
@@ -1849,10 +2633,14 @@ function renderWeekView() {
   }
 
   if (elements.weekScoreCategoryList) {
-    renderWeekCategorySummary("score", elements.weekScoreCategoryList, range.start, range.end);
+    renderWeekCategorySummary("score", elements.weekScoreCategoryList, range.start, range.end, {
+      includeEvent: true
+    });
   }
   if (elements.weekTaxCategoryList) {
-    renderWeekCategorySummary("tax", elements.weekTaxCategoryList, range.start, range.end);
+    renderWeekCategorySummary("tax", elements.weekTaxCategoryList, range.start, range.end, {
+      includeEvent: true
+    });
   }
 }
 
@@ -1861,23 +2649,29 @@ function handleWeekCategorySelect(event) {
   if (!button) {
     return;
   }
-  const { type, categoryId } = button.dataset;
+  const { type, categoryId, direction } = button.dataset;
   if (!type || !categoryId) {
     return;
   }
-  if (
+  const selectionDirection = type === "event" ? (direction === "tax" ? "tax" : "score") : type;
+  const isSameSelection =
     state.weekCategorySelection &&
     state.weekCategorySelection.type === type &&
-    state.weekCategorySelection.categoryId === categoryId
-  ) {
+    state.weekCategorySelection.categoryId === categoryId &&
+    state.weekCategorySelection.direction === selectionDirection;
+
+  if (isSameSelection) {
     state.weekCategorySelection = null;
   } else {
     state.weekCategorySelection = {
       type,
-      categoryId
+      categoryId,
+      direction: selectionDirection
     };
   }
-  renderWeekView();
+  if (state.viewMode === "week") {
+    renderWeekView();
+  }
   renderDetails();
 }
 
@@ -1898,31 +2692,35 @@ function setViewMode(mode) {
 }
 
 function renderWeekCategoryDetails() {
-  if (!elements.weekCategoryDetailTitle || !elements.weekCategoryDetailList) {
+  if (!elements.weekPageDetailTitle || !elements.weekPageDetailList || !state.selectedDate) {
     return;
   }
-  elements.weekCategoryDetailTitle.classList.remove("tax", "score");
-  if (state.viewMode !== "week") {
-    elements.weekCategoryDetailTitle.textContent = "本周大类明细";
-    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">切换到周视图查看明细。</div>`;
-    return;
-  }
+  elements.weekPageDetailTitle.classList.remove("tax", "score");
   if (!state.weekCategorySelection) {
-    elements.weekCategoryDetailTitle.textContent = "本周大类明细";
-    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">点击周视图中的大类查看明细。</div>`;
+    elements.weekPageDetailTitle.textContent = "本周大类明细";
+    elements.weekPageDetailList.innerHTML = `<div class="item-meta">点击大类查看明细。</div>`;
     return;
   }
 
-  const { type, categoryId } = state.weekCategorySelection;
-  const typeLabel = type === "tax" ? "税收" : "得分";
-  elements.weekCategoryDetailTitle.classList.add(type === "tax" ? "tax" : "score");
-  const category = getCategoryById(type, categoryId);
+  const { type, categoryId, direction } = state.weekCategorySelection;
+  const effect = type === "event" ? (direction === "tax" ? "tax" : "score") : type;
+  const typeLabel = effect === "tax" ? "税收" : "得分";
+  elements.weekPageDetailTitle.classList.add(effect === "tax" ? "tax" : "score");
+  const category = getCategoryById(type === "event" ? "event" : type, categoryId);
   const categoryName = category ? category.name : "已删除大类";
+  const displayName = type === "event" ? `活动 · ${categoryName}` : categoryName;
 
   const range = getWeekRange(state.selectedDate);
   const entries = state.entries
     .filter((entry) => {
-      if (entry.type !== type || entry.categoryId !== categoryId) {
+      if (entry.categoryId !== categoryId) {
+        return false;
+      }
+      if (type === "event") {
+        if (entry.type !== "event" || getEntryEffect(entry) !== effect) {
+          return false;
+        }
+      } else if (entry.type !== type) {
         return false;
       }
       const entryDate = parseDate(entry.date);
@@ -1936,39 +2734,28 @@ function renderWeekCategoryDetails() {
     });
 
   const total = entries.reduce((sum, entry) => sum + entry.total, 0);
-  elements.weekCategoryDetailTitle.textContent = `本周${typeLabel} · ${categoryName} · ${formatSignedValue(
+  elements.weekPageDetailTitle.textContent = `本周${typeLabel} · ${displayName} · ${formatSignedValue(
     total,
-    type
+    effect
   )}`;
 
-  elements.weekCategoryDetailList.innerHTML = "";
+  elements.weekPageDetailList.innerHTML = "";
   if (entries.length === 0) {
-    elements.weekCategoryDetailList.innerHTML = `<div class="item-meta">本周暂无记录。</div>`;
+    elements.weekPageDetailList.innerHTML = `<div class="item-meta">本周暂无记录。</div>`;
     return;
   }
 
   entries.forEach((entry) => {
-    const card = document.createElement("div");
-    card.className = "week-detail-card";
-    card.classList.add(type === "tax" ? "is-tax" : "is-score");
+    const line = document.createElement("div");
+    line.className = "week-detail-line";
 
-    const row = document.createElement("div");
-    row.className = "week-detail-row";
+    const info = document.createElement("div");
+    info.className = "week-detail-info";
 
     const dateTag = document.createElement("div");
     dateTag.className = "week-detail-date";
     const weekday = WEEKDAY_FULL[parseDate(entry.date).getDay()];
     dateTag.textContent = `${entry.date} 周${weekday}`;
-
-    const amount = document.createElement("div");
-    amount.className = "week-detail-amount";
-    if (type === "tax") {
-      amount.classList.add("tax");
-    }
-    amount.textContent = formatSignedValue(entry.total, type);
-
-    row.appendChild(dateTag);
-    row.appendChild(amount);
 
     const name = document.createElement("div");
     name.className = "week-detail-name";
@@ -1976,15 +2763,22 @@ function renderWeekCategoryDetails() {
 
     const meta = document.createElement("div");
     meta.className = "week-detail-meta";
-    const detail = [entry.desc, entry.rule].filter(Boolean).join(" · ");
-    meta.textContent = detail
-      ? `倍数 ${formatPoints(entry.multiplier)} · ${detail}`
-      : `倍数 ${formatPoints(entry.multiplier)}`;
+    meta.textContent = `倍数 ${formatPoints(entry.multiplier)}`;
 
-    card.appendChild(row);
-    card.appendChild(name);
-    card.appendChild(meta);
-    elements.weekCategoryDetailList.appendChild(card);
+    info.appendChild(dateTag);
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const amount = document.createElement("div");
+    amount.className = "week-detail-amount";
+    if (effect === "tax") {
+      amount.classList.add("tax");
+    }
+    amount.textContent = formatSignedValue(entry.total, effect);
+
+    line.appendChild(info);
+    line.appendChild(amount);
+    elements.weekPageDetailList.appendChild(line);
   });
 }
 
@@ -1992,26 +2786,14 @@ function renderDetails() {
   if (!state.selectedDate) {
     return;
   }
-  if (elements.dateInput.value !== state.selectedDate) {
-    elements.dateInput.value = state.selectedDate;
+  updateInfoVisibility();
+  renderYearInfo();
+  renderMonthInfo();
+  renderWeekInfo();
+  renderDayInfo();
+  if (elements.weekPage && elements.weekPage.classList.contains("open")) {
+    renderWeekPage();
   }
-  const dateObj = parseDate(state.selectedDate);
-  const weekday = WEEKDAY_FULL[dateObj.getDay()];
-  const todayStr = toDateString(new Date());
-  const todayLabel = state.selectedDate === todayStr ? " · 今天" : "";
-  elements.selectedDateTitle.textContent = `${state.selectedDate} 周${weekday}${todayLabel}`;
-
-  const dayTotals = getTotalsForDate(state.selectedDate);
-  renderSummary(elements.daySummary, dayTotals);
-
-  const range = getWeekRange(state.selectedDate);
-  const weekTotals = getTotalsForRange(range.start, range.end);
-  const rangeLabel = `${toDateString(range.start)} ~ ${toDateString(range.end)}`;
-  elements.weekSummaryTitle.textContent = `本周统计 · ${rangeLabel}`;
-  renderSummary(elements.weekSummary, weekTotals);
-
-  renderEntryList(state.selectedDate);
-  renderWeekCategoryDetails();
 }
 
 function renderAll() {
@@ -2090,6 +2872,33 @@ function createEditorField(labelText, field, value, options) {
 
   label.appendChild(text);
   label.appendChild(input);
+  return label;
+}
+
+function createEditorSelect(labelText, field, value, options) {
+  const label = document.createElement("label");
+  label.className = "editor-field";
+  const text = document.createElement("span");
+  text.textContent = labelText;
+
+  const select = document.createElement("select");
+  select.className = "editor-input";
+  select.dataset.field = field;
+  select.dataset.type = options.dataType;
+  select.dataset.categoryId = options.categoryId;
+  if (options.itemId) {
+    select.dataset.itemId = options.itemId;
+  }
+  (options.choices || []).forEach((choice) => {
+    const option = document.createElement("option");
+    option.value = choice.value;
+    option.textContent = choice.label;
+    select.appendChild(option);
+  });
+  select.value = value;
+
+  label.appendChild(text);
+  label.appendChild(select);
   return label;
 }
 
@@ -2179,6 +2988,19 @@ function renderEditor() {
             })
           );
         }
+        if (state.editorType === "event") {
+          itemGrid.appendChild(
+            createEditorSelect("方向", "direction", item.direction === "tax" ? "tax" : "score", {
+              dataType: state.editorType,
+              categoryId: category.id,
+              itemId: item.id,
+              choices: [
+                { value: "score", label: "得分" },
+                { value: "tax", label: "税收" }
+              ]
+            })
+          );
+        }
         itemCard.appendChild(itemGrid);
 
         const removeItemButton = document.createElement("button");
@@ -2256,7 +3078,9 @@ function handleEditorInput(event) {
     if (!item) {
       return;
     }
-    if (field === "points") {
+    if (field === "direction") {
+      item.direction = target.value === "tax" ? "tax" : "score";
+    } else if (field === "points") {
       const parsed = parseFloat(target.value);
       item.points = Number.isFinite(parsed) ? parsed : 0;
     } else {
@@ -2349,6 +3173,9 @@ function handleEditorAction(event) {
     if (type === "tax") {
       newItem.cadence = "";
     }
+    if (type === "event") {
+      newItem.direction = "score";
+    }
     category.items.push(newItem);
     saveCatalog();
     renderEditor();
@@ -2398,9 +3225,11 @@ function addEntry() {
   }
 
   const total = roundPoints(item.points * multiplier);
+  const effect = state.activeType === "event" ? (item.direction === "tax" ? "tax" : "score") : state.activeType;
   const entry = {
     id: safeId(),
     type: state.activeType,
+    effect,
     categoryId: category.id,
     categoryName: category.name,
     itemId: item.id,
@@ -2456,7 +3285,7 @@ async function init() {
   ]);
   state.baseScoreData = scoreData;
   state.baseTaxData = taxData;
-  state.baseEventData = eventData;
+  state.baseEventData = normalizeEventData(eventData);
   state.usingFallbackData =
     scoreData === FALLBACK_SCORE_DATA || taxData === FALLBACK_TAX_DATA || eventData === FALLBACK_EVENT_DATA;
 
@@ -2464,6 +3293,8 @@ async function init() {
   state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   state.selectedDate = toDateString(today);
   elements.dateInput.value = state.selectedDate;
+  state.yearRange = getYearRange(state.selectedDate);
+  state.yearRangeMode = "year";
 
   initializePeople();
   await initializeBackup();
@@ -2521,6 +3352,52 @@ async function init() {
   if (elements.weekView) {
     elements.weekView.addEventListener("click", handleWeekCategorySelect);
   }
+  if (elements.openYearPage) {
+    elements.openYearPage.addEventListener("click", openYearPage);
+  }
+  if (elements.openWeekPage) {
+    elements.openWeekPage.addEventListener("click", openWeekPage);
+  }
+  if (elements.yearPageClose) {
+    elements.yearPageClose.addEventListener("click", closeYearPage);
+  }
+  if (elements.weekPageClose) {
+    elements.weekPageClose.addEventListener("click", closeWeekPage);
+  }
+  if (elements.weekPagePrev) {
+    elements.weekPagePrev.addEventListener("click", () => shiftWeek(-1));
+  }
+  if (elements.weekPageNext) {
+    elements.weekPageNext.addEventListener("click", () => shiftWeek(1));
+  }
+  if (elements.weekPageToday) {
+    elements.weekPageToday.addEventListener("click", goToCurrentWeek);
+  }
+  if (elements.weekDayList) {
+    elements.weekDayList.addEventListener("click", handleWeekDaySelect);
+  }
+  if (elements.yearPage) {
+    elements.yearPage.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-year") {
+        closeYearPage();
+      }
+    });
+  }
+  if (elements.weekPage) {
+    elements.weekPage.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-week") {
+        closeWeekPage();
+        return;
+      }
+      handleWeekCategorySelect(event);
+    });
+  }
+  if (elements.yearRangeApply) {
+    elements.yearRangeApply.addEventListener("click", applyYearRange);
+  }
+  if (elements.yearRangeReset) {
+    elements.yearRangeReset.addEventListener("click", resetYearRange);
+  }
   elements.addButton.addEventListener("click", addEntry);
   elements.prevMonth.addEventListener("click", () => shiftPeriod(-1));
   elements.nextMonth.addEventListener("click", () => shiftPeriod(1));
@@ -2547,6 +3424,12 @@ async function init() {
     }
     if (elements.peopleModal.classList.contains("open")) {
       closePeopleModal();
+    }
+    if (elements.yearPage && elements.yearPage.classList.contains("open")) {
+      closeYearPage();
+    }
+    if (elements.weekPage && elements.weekPage.classList.contains("open")) {
+      closeWeekPage();
     }
   });
 

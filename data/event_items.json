@@ -11,7 +11,8 @@
           "name": "特殊活动",
           "desc": "自定义活动",
           "rule": "按需填写",
-          "points": 1
+          "points": 1,
+          "direction": "score"
         }
       ]
     }

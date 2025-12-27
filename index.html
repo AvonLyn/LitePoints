@@ -32,7 +32,6 @@
           <div id="backup-status" class="backup-status" role="status" aria-live="polite">自动备份：未设置</div>
           <input id="backup-file-input" type="file" accept="application/json" hidden />
         </div>
-        <div class="status" id="data-status">数据准备中...</div>
       </div>
     </header>
 
@@ -104,20 +103,35 @@
 
       <aside class="panel right-panel">
         <h2>信息栏</h2>
-        <section class="summary">
-          <div class="summary-title" id="selected-date-title">--</div>
-          <div class="summary-grid" id="day-summary"></div>
+        <div class="info-actions">
+          <button id="open-year-page" class="ghost-btn small" type="button">年信息</button>
+          <button id="open-week-page" class="ghost-btn small" type="button">周信息</button>
+        </div>
+
+        <section class="summary info-tier" id="month-section">
+          <div class="summary-title" id="month-summary-title">本月统计</div>
+          <div class="summary-grid" id="month-summary"></div>
+          <div class="category-split">
+            <div class="category-block">
+              <div class="category-title score">得分大类</div>
+              <div id="month-score-category-list" class="category-list"></div>
+            </div>
+            <div class="category-block">
+              <div class="category-title tax">税收大类</div>
+              <div id="month-tax-category-list" class="category-list"></div>
+            </div>
+          </div>
         </section>
-        <section class="summary">
+
+        <section class="summary info-tier" id="week-section">
           <div class="summary-title" id="week-summary-title">本周统计</div>
           <div class="summary-grid" id="week-summary"></div>
         </section>
-        <section class="summary week-detail">
-          <div class="summary-title" id="week-category-detail-title">本周大类明细</div>
-          <div id="week-category-detail-list" class="week-detail-list"></div>
-        </section>
-        <section class="step">
-          <h3>当天记录</h3>
+
+        <section class="summary info-tier" id="day-section">
+          <div class="summary-title" id="selected-date-title">--</div>
+          <div class="summary-grid" id="day-summary"></div>
+          <div class="summary-subtitle">当天记录</div>
           <div id="entry-list" class="entry-list"></div>
         </section>
       </aside>
@@ -154,6 +168,94 @@
           <div class="people-hint">名字可直接编辑，删除会清除对应数据</div>
           <div id="people-list" class="people-list"></div>
           <button id="add-person" class="ghost-btn people-add" type="button">+ 添加被管理人</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="year-page" class="report-page" aria-hidden="true">
+      <div class="report-backdrop" data-action="close-year" aria-hidden="true"></div>
+      <div class="report-card" role="dialog" aria-modal="true" aria-label="年信息">
+        <div class="report-head">
+          <div class="report-title">年信息</div>
+          <div class="report-actions">
+            <button id="year-page-close" class="ghost-btn" type="button">返回</button>
+          </div>
+        </div>
+        <div class="report-body">
+          <section class="report-section">
+            <div class="summary-title" id="year-summary-title">年度总览</div>
+            <div class="range-controls">
+              <label class="range-field">
+                起始
+                <input id="year-range-start" type="date" />
+              </label>
+              <label class="range-field">
+                结束
+                <input id="year-range-end" type="date" />
+              </label>
+              <div class="range-actions">
+                <button id="year-range-apply" class="ghost-btn small" type="button">应用</button>
+                <button id="year-range-reset" class="ghost-btn small" type="button">本年</button>
+              </div>
+            </div>
+            <div class="summary-grid" id="year-summary"></div>
+            <div class="category-split">
+              <div class="category-block">
+                <div class="category-title score">得分大类</div>
+                <div id="year-score-category-list" class="category-list"></div>
+              </div>
+              <div class="category-block">
+                <div class="category-title tax">税收大类</div>
+                <div id="year-tax-category-list" class="category-list"></div>
+              </div>
+            </div>
+          </section>
+          <section class="report-section">
+            <div class="summary-subtitle">月份概况</div>
+            <div id="year-month-list" class="month-list"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="week-page" class="report-page" aria-hidden="true">
+      <div class="report-backdrop" data-action="close-week" aria-hidden="true"></div>
+      <div class="report-card" role="dialog" aria-modal="true" aria-label="周信息">
+        <div class="report-head">
+          <div class="report-title">周信息</div>
+          <div class="report-actions">
+            <button id="week-page-prev" class="ghost-btn small" type="button">← 上周</button>
+            <button id="week-page-today" class="ghost-btn small" type="button">本周</button>
+            <button id="week-page-next" class="ghost-btn small" type="button">下周 →</button>
+            <button id="week-page-close" class="ghost-btn" type="button">返回</button>
+          </div>
+        </div>
+        <div class="report-body">
+          <section class="report-section">
+            <div class="summary-title" id="week-page-summary-title">本周统计</div>
+            <div class="summary-grid" id="week-page-summary"></div>
+          </section>
+          <section class="report-section">
+            <div class="summary-subtitle">本周每日</div>
+            <div id="week-day-list" class="week-day-list"></div>
+          </section>
+          <section class="report-section">
+            <div class="summary-subtitle">本周大类</div>
+            <div class="category-split">
+              <div class="category-block">
+                <div class="category-title score">得分大类</div>
+                <div id="week-page-score-category-list" class="category-list"></div>
+              </div>
+              <div class="category-block">
+                <div class="category-title tax">税收大类</div>
+                <div id="week-page-tax-category-list" class="category-list"></div>
+              </div>
+            </div>
+          </section>
+          <section class="report-section">
+            <div class="summary-subtitle" id="week-page-detail-title">本周大类明细</div>
+            <div id="week-page-detail-list" class="week-detail-list"></div>
+          </section>
         </div>
       </div>
     </div>

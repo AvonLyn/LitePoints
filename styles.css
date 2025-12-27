@@ -637,8 +637,30 @@ input[type="date"] {
 
 .week-detail-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   margin-top: 6px;
+}
+
+.week-detail-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(31, 41, 51, 0.12);
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.06), rgba(224, 103, 47, 0.06), transparent);
+  flex-wrap: wrap;
+}
+
+.week-detail-line:last-child {
+  border-bottom: none;
+}
+
+.week-detail-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .week-detail-card {
@@ -687,7 +709,7 @@ input[type="date"] {
 }
 
 .week-detail-amount {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--accent-strong);
   font-variant-numeric: tabular-nums;
@@ -699,6 +721,18 @@ input[type="date"] {
 
 .summary {
   margin-bottom: 18px;
+}
+
+.info-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.info-tier {
+  display: grid;
+  gap: 8px;
 }
 
 .summary-title {
@@ -719,6 +753,265 @@ input[type="date"] {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.summary-subtitle {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.summary-subtitle.tax {
+  color: var(--accent-warm);
+}
+
+.summary-subtitle.score {
+  color: var(--accent-strong);
+}
+
+.range-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.range-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.range-controls input[type="date"] {
+  border-radius: 10px;
+  border: 1px solid rgba(31, 41, 51, 0.15);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.range-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ghost-btn.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.category-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.category-block {
+  display: grid;
+  gap: 6px;
+}
+
+.category-title {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.category-title.score {
+  color: var(--accent-strong);
+}
+
+.category-title.tax {
+  color: var(--accent-warm);
+}
+
+.category-list {
+  display: grid;
+  gap: 6px;
+}
+
+.category-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(31, 41, 51, 0.08);
+  background: #fff;
+  font-size: 12px;
+}
+
+.category-name {
+  color: var(--ink);
+}
+
+.category-value {
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.category-value.tax {
+  color: var(--accent-warm);
+}
+
+.report-page {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+}
+
+.report-page.open {
+  display: flex;
+}
+
+.report-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 41, 51, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.report-card {
+  position: relative;
+  z-index: 1;
+  width: min(980px, 94vw);
+  max-height: 90vh;
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.report-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-title {
+  font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-body {
+  display: grid;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 6px;
+  min-height: 0;
+}
+
+.report-section {
+  display: grid;
+  gap: 8px;
+}
+
+.month-list {
+  display: grid;
+  gap: 6px;
+}
+
+.month-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(31, 41, 51, 0.12);
+}
+
+.month-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.month-values {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.month-values .score {
+  color: var(--accent-strong);
+}
+
+.month-values .tax {
+  color: var(--accent-warm);
+}
+
+.week-day-list {
+  display: grid;
+  gap: 6px;
+}
+
+.week-day-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(31, 41, 51, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border 0.2s ease, background 0.2s ease;
+  text-align: left;
+  appearance: none;
+}
+
+.week-day-row.is-selected {
+  border-color: var(--accent);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.week-day-label {
+  color: var(--muted);
+}
+
+.week-day-values {
+  display: flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.week-day-values .tax {
+  color: var(--accent-warm);
+}
+
+.week-day-values .score {
+  color: var(--accent-strong);
 }
 
 .summary-card {
@@ -742,46 +1035,41 @@ input[type="date"] {
 
 .entry-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
-.entry-card {
-  border-radius: 14px;
-  border: 1px solid rgba(31, 41, 51, 0.08);
-  background: #fff;
-  padding: 12px;
-  display: grid;
+.entry-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(31, 41, 51, 0.12);
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.06), rgba(224, 103, 47, 0.06), transparent);
+  flex-wrap: wrap;
+}
+
+.entry-line:last-child {
+  border-bottom: none;
+}
+
+.entry-info {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.entry-actions {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
 }
 
-.entry-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-
-.entry-title {
-  font-size: 14px;
-}
-
-.entry-tag {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.1);
-  color: var(--accent-strong);
-  margin-left: 6px;
-}
-
-.entry-tag.tax {
-  background: rgba(224, 103, 47, 0.12);
-  color: #b04212;
-}
-
-.entry-tag.event {
-  background: rgba(15, 118, 110, 0.12);
-  color: var(--accent-strong);
+.entry-name {
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .entry-meta {
@@ -789,14 +1077,23 @@ input[type="date"] {
   color: var(--muted);
 }
 
+.entry-value {
+  font-size: 12px;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-value.tax {
+  color: var(--accent-warm);
+}
+
 .entry-remove {
   border: none;
-  background: rgba(224, 103, 47, 0.12);
-  color: #b04212;
-  border-radius: 10px;
-  padding: 6px 10px;
+  background: transparent;
+  color: var(--accent-warm);
   cursor: pointer;
   font-size: 12px;
+  padding: 2px 6px;
 }
 
 .modal {
@@ -988,6 +1285,11 @@ input[type="date"] {
   gap: 6px;
 }
 
+.people-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .people-label {
   display: grid;
   gap: 4px;
@@ -1108,6 +1410,19 @@ input[type="date"] {
     width: 100%;
   }
 
+  .report-card {
+    padding: 16px;
+  }
+
+  .report-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .week-day-row {
+    align-items: flex-start;
+  }
+
   .calendar-cell {
     min-height: 70px;
     padding: 8px;
@@ -1118,6 +1433,14 @@ input[type="date"] {
   }
 
   .week-category-list {
+    grid-template-columns: 1fr;
+  }
+
+  .range-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .category-split {
     grid-template-columns: 1fr;
   }
 
