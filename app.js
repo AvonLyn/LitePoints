@@ -479,6 +479,52 @@ const FALLBACK_EVENT_DATA = {
   ]
 };
 
+const FALLBACK_CONSUME_DATA = {
+  version: "1.0",
+  type: "consume",
+  categories: [
+    {
+      id: "daily",
+      name: "日常消费",
+      items: [
+        {
+          id: "daily_food",
+          name: "餐饮",
+          desc: "吃饭/饮品",
+          rule: "按实际消费",
+          points: 1,
+          cadence: "每次"
+        },
+        {
+          id: "daily_fun",
+          name: "娱乐",
+          desc: "电影/游戏",
+          rule: "按实际消费",
+          points: 1,
+          cadence: "每次"
+        }
+      ]
+    },
+    {
+      id: "reward",
+      name: "奖励兑换",
+      items: [
+        {
+          id: "reward_rest",
+          name: "休息奖励",
+          desc: "放松/休闲",
+          rule: "按实际消费",
+          points: 1,
+          cadence: "每次"
+        }
+      ]
+    }
+  ]
+};
+
+const CONSUME_CUSTOM_CATEGORY_ID = "consume_custom";
+const CONSUME_CUSTOM_LABEL = "自定义项";
+
 const STORAGE_KEY = "litepoints_entries_v1";
 const CATALOG_KEY = "litepoints_catalog_v1";
 const PEOPLE_KEY = "litepoints_people_v1";
@@ -496,12 +542,16 @@ const state = {
   baseScoreData: null,
   baseTaxData: null,
   baseEventData: null,
+  baseConsumeData: null,
   scoreData: null,
   taxData: null,
   eventData: null,
+  consumeData: null,
   activeType: "score",
   activeCategoryId: null,
   activeItemId: null,
+  consumeCategoryId: null,
+  consumeItemId: null,
   entries: [],
   currentMonth: null,
   selectedDate: null,
@@ -553,6 +603,7 @@ const elements = {
   daySection: document.getElementById("day-section"),
   openYearPage: document.getElementById("open-year-page"),
   openWeekPage: document.getElementById("open-week-page"),
+  openConsumePage: document.getElementById("open-consume-page"),
   yearPage: document.getElementById("year-page"),
   yearPageClose: document.getElementById("year-page-close"),
   yearMonthList: document.getElementById("year-month-list"),
@@ -585,6 +636,26 @@ const elements = {
   weekSummary: document.getElementById("week-summary"),
   weekSummaryTitle: document.getElementById("week-summary-title"),
   entryList: document.getElementById("entry-list"),
+  consumePage: document.getElementById("consume-page"),
+  consumePageClose: document.getElementById("consume-page-close"),
+  consumeManageButton: document.getElementById("consume-manage"),
+  consumeCategoryList: document.getElementById("consume-category-list"),
+  consumeItemList: document.getElementById("consume-item-list"),
+  consumeSelectedItem: document.getElementById("consume-selected-item"),
+  consumeMultiplierInput: document.getElementById("consume-multiplier"),
+  consumeDateInput: document.getElementById("consume-date"),
+  consumeAddButton: document.getElementById("consume-add-entry"),
+  consumeHint: document.getElementById("consume-hint"),
+  consumeCustomName: document.getElementById("consume-custom-name"),
+  consumeCustomPoints: document.getElementById("consume-custom-points"),
+  consumeCustomMultiplier: document.getElementById("consume-custom-multiplier"),
+  consumeCustomAdd: document.getElementById("consume-custom-add"),
+  consumeCustomHint: document.getElementById("consume-custom-hint"),
+  consumeSummaryTitle: document.getElementById("consume-summary-title"),
+  consumeSummaryGrid: document.getElementById("consume-summary-grid"),
+  consumeCategorySummary: document.getElementById("consume-category-summary"),
+  consumeDayTitle: document.getElementById("consume-day-title"),
+  consumeEntryList: document.getElementById("consume-entry-list"),
   openEditor: document.getElementById("open-editor"),
   editorModal: document.getElementById("editor-modal"),
   closeEditor: document.getElementById("close-editor"),
@@ -658,6 +729,9 @@ function getEntryEffect(entry) {
   if (entry.type === "event") {
     return entry.effect === "tax" ? "tax" : "score";
   }
+  if (entry.type === "consume") {
+    return "tax";
+  }
   return "score";
 }
 
@@ -685,6 +759,28 @@ function setHint(message, tone) {
   elements.hint.classList.remove("ok", "warn");
   if (tone) {
     elements.hint.classList.add(tone);
+  }
+}
+
+function setConsumeHint(message, tone) {
+  if (!elements.consumeHint) {
+    return;
+  }
+  elements.consumeHint.textContent = message || "";
+  elements.consumeHint.classList.remove("ok", "warn");
+  if (tone) {
+    elements.consumeHint.classList.add(tone);
+  }
+}
+
+function setConsumeCustomHint(message, tone) {
+  if (!elements.consumeCustomHint) {
+    return;
+  }
+  elements.consumeCustomHint.textContent = message || "";
+  elements.consumeCustomHint.classList.remove("ok", "warn");
+  if (tone) {
+    elements.consumeCustomHint.classList.add(tone);
   }
 }
 
@@ -901,7 +997,8 @@ function buildBackupPayload(reason) {
     catalog: {
       score: state.scoreData,
       tax: state.taxData,
-      event: state.eventData
+      event: state.eventData,
+      consume: state.consumeData
     }
   };
 }
@@ -1279,11 +1376,12 @@ function normalizeBackupPayload(data) {
   let catalog = null;
   if (data.catalog && typeof data.catalog === "object") {
     catalog = data.catalog;
-  } else if (data.score || data.tax || data.event) {
+  } else if (data.score || data.tax || data.event || data.consume) {
     catalog = {
       score: data.score,
       tax: data.tax,
-      event: data.event
+      event: data.event,
+      consume: data.consume
     };
   }
   if (!catalog) {
@@ -1291,7 +1389,7 @@ function normalizeBackupPayload(data) {
   }
   const entries = data.entries.map((entry) => {
     const effect =
-      entry.type === "tax"
+      entry.type === "tax" || entry.type === "consume"
         ? "tax"
         : entry.type === "event"
           ? entry.effect === "tax"
@@ -1309,7 +1407,8 @@ function normalizeBackupPayload(data) {
     entries,
     scoreData: catalog.score ? cloneData(catalog.score) : cloneData(state.baseScoreData),
     taxData: catalog.tax ? cloneData(catalog.tax) : cloneData(state.baseTaxData),
-    eventData: normalizeEventData(catalog.event ? cloneData(catalog.event) : cloneData(state.baseEventData))
+    eventData: normalizeEventData(catalog.event ? cloneData(catalog.event) : cloneData(state.baseEventData)),
+    consumeData: catalog.consume ? cloneData(catalog.consume) : cloneData(state.baseConsumeData)
   };
 }
 
@@ -1338,8 +1437,11 @@ async function handleBackupImport(event) {
     state.scoreData = normalized.scoreData;
     state.taxData = normalized.taxData;
     state.eventData = normalized.eventData;
+    state.consumeData = normalized.consumeData;
     state.activeCategoryId = null;
     state.activeItemId = null;
+    state.consumeCategoryId = null;
+    state.consumeItemId = null;
     state.weekCategorySelection = null;
     saveEntries();
     saveCatalog();
@@ -1433,7 +1535,8 @@ function saveCatalog() {
     const payload = {
       score: state.scoreData,
       tax: state.taxData,
-      event: state.eventData
+      event: state.eventData,
+      consume: state.consumeData
     };
     localStorage.setItem(getCatalogKey(state.activePersonId), JSON.stringify(payload));
     updateDataStatus(true);
@@ -1564,9 +1667,12 @@ function setActivePerson(personId) {
   state.eventData = normalizeEventData(
     catalog && catalog.event ? catalog.event : cloneData(state.baseEventData)
   );
+  state.consumeData = catalog && catalog.consume ? catalog.consume : cloneData(state.baseConsumeData);
   state.entries = loadEntries(personId);
   state.activeCategoryId = null;
   state.activeItemId = null;
+  state.consumeCategoryId = null;
+  state.consumeItemId = null;
   state.weekCategorySelection = null;
 
   renderPersonSelect();
@@ -1715,6 +1821,9 @@ function getDataByType(type) {
   }
   if (type === "event") {
     return state.eventData;
+  }
+  if (type === "consume") {
+    return state.consumeData;
   }
   return null;
 }
@@ -1876,6 +1985,151 @@ function renderSelectedItem() {
   `;
 }
 
+function getConsumeCategory() {
+  const data = state.consumeData;
+  if (!data || !Array.isArray(data.categories)) {
+    return null;
+  }
+  return data.categories.find((category) => category.id === state.consumeCategoryId) || null;
+}
+
+function getConsumeItem() {
+  const category = getConsumeCategory();
+  if (!category || !Array.isArray(category.items)) {
+    return null;
+  }
+  return category.items.find((item) => item.id === state.consumeItemId) || null;
+}
+
+function ensureConsumeSelection() {
+  const data = state.consumeData;
+  if (!data || !Array.isArray(data.categories) || data.categories.length === 0) {
+    state.consumeCategoryId = null;
+    state.consumeItemId = null;
+    return;
+  }
+  if (!data.categories.some((category) => category.id === state.consumeCategoryId)) {
+    state.consumeCategoryId = data.categories[0].id;
+    state.consumeItemId = null;
+  }
+  const activeCategory = getConsumeCategory();
+  if (
+    !activeCategory ||
+    !Array.isArray(activeCategory.items) ||
+    !activeCategory.items.some((item) => item.id === state.consumeItemId)
+  ) {
+    state.consumeItemId = null;
+  }
+}
+
+function renderConsumeCategories() {
+  if (!elements.consumeCategoryList) {
+    return;
+  }
+  const data = state.consumeData;
+  if (!data) {
+    return;
+  }
+  ensureConsumeSelection();
+
+  elements.consumeCategoryList.innerHTML = "";
+  if (!data.categories || data.categories.length === 0) {
+    elements.consumeCategoryList.innerHTML = `<div class="item-meta">暂无大类，请先添加。</div>`;
+    return;
+  }
+  data.categories.forEach((category) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip-btn";
+    button.textContent = category.name;
+    if (category.id === state.consumeCategoryId) {
+      button.classList.add("active");
+    }
+    button.addEventListener("click", () => {
+      state.consumeCategoryId = category.id;
+      state.consumeItemId = null;
+      renderConsumeCategories();
+      renderConsumeItems();
+      renderConsumeSelectedItem();
+    });
+    elements.consumeCategoryList.appendChild(button);
+  });
+}
+
+function renderConsumeItems() {
+  if (!elements.consumeItemList) {
+    return;
+  }
+  const category = getConsumeCategory();
+  elements.consumeItemList.innerHTML = "";
+  if (!category) {
+    elements.consumeItemList.innerHTML = `<div class="item-meta">暂无条目，请先选择或添加大类。</div>`;
+    return;
+  }
+  if (!category.items || category.items.length === 0) {
+    elements.consumeItemList.innerHTML = `<div class="item-meta">暂无条目，请在管理固定项中添加。</div>`;
+    return;
+  }
+  category.items.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "item-btn";
+    if (item.id === state.consumeItemId) {
+      button.classList.add("active");
+    }
+
+    const title = document.createElement("div");
+    title.className = "item-title";
+    title.textContent = item.name;
+
+    const meta = document.createElement("div");
+    meta.className = "item-meta";
+    const metaParts = [`${formatPoints(item.points)} 积分`];
+    if (item.desc) {
+      metaParts.push(item.desc);
+    }
+    meta.textContent = metaParts.join(" · ");
+
+    const rule = document.createElement("div");
+    rule.className = "item-meta";
+    rule.textContent = item.rule || item.cadence || "";
+
+    button.appendChild(title);
+    button.appendChild(meta);
+    if (rule.textContent) {
+      button.appendChild(rule);
+    }
+    button.addEventListener("click", () => {
+      state.consumeItemId = item.id;
+      renderConsumeItems();
+      renderConsumeSelectedItem();
+    });
+    elements.consumeItemList.appendChild(button);
+  });
+}
+
+function renderConsumeSelectedItem() {
+  if (!elements.consumeSelectedItem) {
+    return;
+  }
+  const item = getConsumeItem();
+  const category = getConsumeCategory();
+  if (!item || !category) {
+    elements.consumeSelectedItem.innerHTML = `
+      <div class="selected-title">尚未选择条目</div>
+      <div class="selected-meta">请先选择固定项条目</div>
+    `;
+    return;
+  }
+  const cadence = item.cadence ? ` · ${item.cadence}` : "";
+  const extra = [item.desc, item.rule].filter(Boolean).join(" · ");
+  elements.consumeSelectedItem.innerHTML = `
+    <div class="selected-title">${item.name}</div>
+    <div class="selected-meta">${category.name} · 消费 · 基础 ${formatPoints(item.points)} 积分${cadence}</div>
+    <div class="selected-meta">${extra}</div>
+  `;
+}
+
 function setActiveType(type) {
   if (state.activeType === type) {
     return;
@@ -2024,6 +2278,43 @@ function renderCategoryList(container, totals, type, limit) {
   }
 }
 
+function renderConsumeCategoryList(container, totals, limit) {
+  if (!container) {
+    return;
+  }
+  container.innerHTML = "";
+  const visible = totals.filter((item) => item.total > 0);
+  if (visible.length === 0) {
+    container.innerHTML = `<div class="item-meta">暂无消费记录。</div>`;
+    return;
+  }
+  const sorted = visible.sort((a, b) => b.total - a.total);
+  const display = limit ? sorted.slice(0, limit) : sorted;
+  display.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "category-row";
+
+    const name = document.createElement("div");
+    name.className = "category-name";
+    name.textContent = item.name;
+
+    const value = document.createElement("div");
+    value.className = "category-value tax";
+    value.textContent = formatSignedValue(item.total, "tax");
+
+    row.appendChild(name);
+    row.appendChild(value);
+    container.appendChild(row);
+  });
+
+  if (sorted.length > display.length) {
+    const more = document.createElement("div");
+    more.className = "item-meta";
+    more.textContent = `还有 ${sorted.length - display.length} 项未展开`;
+    container.appendChild(more);
+  }
+}
+
 function renderCategoryBreakdown(scoreContainer, taxContainer, startDate, endDate, limit) {
   renderCategoryList(scoreContainer, getScoreCategoryTotalsForRange(startDate, endDate), "score", limit);
   renderCategoryList(taxContainer, getTaxCategoryTotalsForRange(startDate, endDate), "tax", limit);
@@ -2033,14 +2324,16 @@ function renderEntryList(dateStr) {
   const entries = state.entries
     .filter((entry) => entry.date === dateStr)
     .sort((a, b) => a.createdAt - b.createdAt);
+  const consumeEntries = entries.filter((entry) => entry.type === "consume");
+  const visibleEntries = entries.filter((entry) => entry.type !== "consume");
 
   elements.entryList.innerHTML = "";
-  if (entries.length === 0) {
+  if (visibleEntries.length === 0 && consumeEntries.length === 0) {
     elements.entryList.innerHTML = `<div class="item-meta">当天暂无记录。</div>`;
     return;
   }
 
-  entries.forEach((entry) => {
+  visibleEntries.forEach((entry) => {
     const line = document.createElement("div");
     line.className = "entry-line";
 
@@ -2086,6 +2379,205 @@ function renderEntryList(dateStr) {
     line.appendChild(actions);
     elements.entryList.appendChild(line);
   });
+
+  if (consumeEntries.length > 0) {
+    const total = consumeEntries.reduce((sum, entry) => sum + entry.total, 0);
+    const line = document.createElement("div");
+    line.className = "entry-line consume-line";
+
+    const info = document.createElement("div");
+    info.className = "entry-info";
+
+    const name = document.createElement("div");
+    name.className = "entry-name";
+    name.textContent = "消费扣除";
+
+    info.appendChild(name);
+
+    const actions = document.createElement("div");
+    actions.className = "entry-actions";
+
+    const value = document.createElement("div");
+    value.className = "entry-value tax";
+    value.textContent = formatSignedValue(total, "tax");
+
+    actions.appendChild(value);
+
+    line.appendChild(info);
+    line.appendChild(actions);
+    elements.entryList.appendChild(line);
+  }
+}
+
+function getConsumeDateValue() {
+  if (elements.consumeDateInput && elements.consumeDateInput.value) {
+    return elements.consumeDateInput.value;
+  }
+  return state.selectedDate;
+}
+
+function getConsumeEntriesForDate(dateStr) {
+  if (!dateStr) {
+    return [];
+  }
+  return state.entries.filter((entry) => entry.type === "consume" && entry.date === dateStr);
+}
+
+function getConsumeEntriesForRange(startDate, endDate) {
+  return state.entries.filter((entry) => {
+    if (entry.type !== "consume") {
+      return false;
+    }
+    const entryDate = parseDate(entry.date);
+    return entryDate >= startDate && entryDate <= endDate;
+  });
+}
+
+function getConsumeTotalForDate(dateStr) {
+  const entries = getConsumeEntriesForDate(dateStr);
+  const total = entries.reduce((sum, entry) => sum + entry.total, 0);
+  return roundPoints(total);
+}
+
+function getConsumeTotalForRange(startDate, endDate) {
+  const entries = getConsumeEntriesForRange(startDate, endDate);
+  const total = entries.reduce((sum, entry) => sum + entry.total, 0);
+  return roundPoints(total);
+}
+
+function getConsumeCategoryTotalsForRange(startDate, endDate) {
+  const totals = getCategoryTotalsForRange(startDate, endDate, "consume");
+  const customEntries = getConsumeEntriesForRange(startDate, endDate).filter(
+    (entry) => entry.categoryId === CONSUME_CUSTOM_CATEGORY_ID
+  );
+  const customTotal = customEntries.reduce((sum, entry) => sum + entry.total, 0);
+  if (customTotal > 0) {
+    totals.push({
+      id: CONSUME_CUSTOM_CATEGORY_ID,
+      name: CONSUME_CUSTOM_LABEL,
+      total: roundPoints(customTotal)
+    });
+  }
+  return totals;
+}
+
+function renderConsumeEntryList(dateStr) {
+  if (!elements.consumeEntryList) {
+    return;
+  }
+  elements.consumeEntryList.innerHTML = "";
+  if (!dateStr) {
+    elements.consumeEntryList.innerHTML = `<div class="item-meta">请选择日期查看消费。</div>`;
+    return;
+  }
+  const entries = getConsumeEntriesForDate(dateStr).sort((a, b) => a.createdAt - b.createdAt);
+  if (entries.length === 0) {
+    elements.consumeEntryList.innerHTML = `<div class="item-meta">当天暂无消费记录。</div>`;
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const line = document.createElement("div");
+    line.className = "entry-line consume-line";
+
+    const info = document.createElement("div");
+    info.className = "entry-info";
+
+    const name = document.createElement("div");
+    name.className = "entry-name";
+    name.textContent = entry.itemName;
+
+    const meta = document.createElement("div");
+    meta.className = "entry-meta";
+    const metaParts = [];
+    if (entry.categoryId === CONSUME_CUSTOM_CATEGORY_ID) {
+      metaParts.push(CONSUME_CUSTOM_LABEL);
+      metaParts.push(`积分制 ${formatPoints(entry.points)}`);
+    } else {
+      metaParts.push(entry.categoryName);
+    }
+    metaParts.push(`倍数 ${formatPoints(entry.multiplier)}`);
+    meta.textContent = metaParts.join(" · ");
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "entry-actions";
+
+    const value = document.createElement("div");
+    value.className = "entry-value tax";
+    value.textContent = formatSignedValue(entry.total, "tax");
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "entry-remove";
+    removeButton.textContent = "撤回";
+    removeButton.addEventListener("click", () => {
+      state.entries = state.entries.filter((item) => item.id !== entry.id);
+      saveEntries();
+      renderAll();
+    });
+
+    actions.appendChild(value);
+    actions.appendChild(removeButton);
+
+    line.appendChild(info);
+    line.appendChild(actions);
+    elements.consumeEntryList.appendChild(line);
+  });
+}
+
+function renderConsumeSummary() {
+  if (!elements.consumeSummaryGrid || !elements.consumeSummaryTitle) {
+    return;
+  }
+  const monthBase = state.currentMonth || (state.selectedDate ? parseDate(state.selectedDate) : new Date());
+  const range = getMonthRange(monthBase);
+  const monthTotal = getConsumeTotalForRange(range.start, range.end);
+  const dateStr = getConsumeDateValue();
+  const dayTotal = dateStr ? getConsumeTotalForDate(dateStr) : 0;
+  const rangeLabel = formatRangeLabel(range.start, range.end);
+  elements.consumeSummaryTitle.textContent = `${range.start.getFullYear()}年${range.start.getMonth() + 1}月消费 · ${rangeLabel}`;
+
+  elements.consumeSummaryGrid.innerHTML = `
+    <div class="summary-card">
+      <div class="summary-label">本月消费</div>
+      <div class="summary-value tax">${formatSignedValue(monthTotal, "tax")}</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">选中日期消费</div>
+      <div class="summary-value tax">${formatSignedValue(dayTotal, "tax")}</div>
+    </div>
+  `;
+  if (elements.consumeCategorySummary) {
+    renderConsumeCategoryList(
+      elements.consumeCategorySummary,
+      getConsumeCategoryTotalsForRange(range.start, range.end),
+      6
+    );
+  }
+  if (elements.consumeDayTitle) {
+    elements.consumeDayTitle.textContent = dateStr ? `${dateStr} 消费明细` : "消费明细";
+  }
+}
+
+function renderConsumePage() {
+  if (!elements.consumePage || !elements.consumePage.classList.contains("open")) {
+    return;
+  }
+  if (
+    elements.consumeDateInput &&
+    state.selectedDate &&
+    elements.consumeDateInput.value !== state.selectedDate
+  ) {
+    elements.consumeDateInput.value = state.selectedDate;
+  }
+  renderConsumeCategories();
+  renderConsumeItems();
+  renderConsumeSelectedItem();
+  renderConsumeSummary();
+  renderConsumeEntryList(getConsumeDateValue());
 }
 
 function updateInfoVisibility() {
@@ -2377,6 +2869,26 @@ function closeWeekPage() {
   }
   elements.weekPage.classList.remove("open");
   elements.weekPage.setAttribute("aria-hidden", "true");
+}
+
+function openConsumePage() {
+  if (!elements.consumePage) {
+    return;
+  }
+  elements.consumePage.classList.add("open");
+  elements.consumePage.setAttribute("aria-hidden", "false");
+  if (elements.consumeDateInput && state.selectedDate) {
+    elements.consumeDateInput.value = state.selectedDate;
+  }
+  renderConsumePage();
+}
+
+function closeConsumePage() {
+  if (!elements.consumePage) {
+    return;
+  }
+  elements.consumePage.classList.remove("open");
+  elements.consumePage.setAttribute("aria-hidden", "true");
 }
 
 function renderDayInfo() {
@@ -2794,6 +3306,9 @@ function renderDetails() {
   if (elements.weekPage && elements.weekPage.classList.contains("open")) {
     renderWeekPage();
   }
+  if (elements.consumePage && elements.consumePage.classList.contains("open")) {
+    renderConsumePage();
+  }
 }
 
 function renderAll() {
@@ -2979,7 +3494,7 @@ function renderEditor() {
             itemId: item.id
           })
         );
-        if (state.editorType === "tax") {
+        if (state.editorType === "tax" || state.editorType === "consume") {
           itemGrid.appendChild(
             createEditorField("频次", "cadence", item.cadence || "", {
               dataType: state.editorType,
@@ -3044,6 +3559,18 @@ function openEditor() {
   elements.editorModal.setAttribute("aria-hidden", "false");
 }
 
+function openConsumeEditor() {
+  state.editorType = "consume";
+  elements.editorButtons.forEach((button) => {
+    const active = button.dataset.type === state.editorType;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  renderEditor();
+  elements.editorModal.classList.add("open");
+  elements.editorModal.setAttribute("aria-hidden", "false");
+}
+
 function closeEditor() {
   elements.editorModal.classList.remove("open");
   elements.editorModal.setAttribute("aria-hidden", "true");
@@ -3098,6 +3625,9 @@ function handleEditorInput(event) {
     renderItems();
     renderSelectedItem();
   }
+  if (type === "consume") {
+    renderConsumePage();
+  }
   if (state.viewMode === "week") {
     renderWeekView();
   }
@@ -3131,6 +3661,10 @@ function handleEditorAction(event) {
       state.activeCategoryId = category.id;
       state.activeItemId = null;
       renderAll();
+    } else if (type === "consume") {
+      state.consumeCategoryId = category.id;
+      state.consumeItemId = null;
+      renderConsumePage();
     } else if (state.viewMode === "week" && type === "score") {
       renderWeekView();
     }
@@ -3147,6 +3681,12 @@ function handleEditorAction(event) {
         state.activeItemId = null;
       }
       renderAll();
+    } else if (type === "consume") {
+      if (state.consumeCategoryId === categoryId) {
+        state.consumeCategoryId = null;
+        state.consumeItemId = null;
+      }
+      renderConsumePage();
     } else if (state.viewMode === "week" && type === "score") {
       renderWeekView();
     }
@@ -3170,7 +3710,7 @@ function handleEditorAction(event) {
       rule: "",
       points: 1
     };
-    if (type === "tax") {
+    if (type === "tax" || type === "consume") {
       newItem.cadence = "";
     }
     if (type === "event") {
@@ -3182,6 +3722,9 @@ function handleEditorAction(event) {
     if (type === state.activeType) {
       renderItems();
       renderSelectedItem();
+    } else if (type === "consume") {
+      renderConsumeItems();
+      renderConsumeSelectedItem();
     }
     return;
   }
@@ -3197,6 +3740,13 @@ function handleEditorAction(event) {
     if (type === state.activeType && state.activeItemId === itemId) {
       state.activeItemId = null;
       renderSelectedItem();
+    }
+    if (type === "consume") {
+      if (state.consumeItemId === itemId) {
+        state.consumeItemId = null;
+      }
+      renderConsumeItems();
+      renderConsumeSelectedItem();
     }
     renderEditor();
     renderItems();
@@ -3253,6 +3803,126 @@ function addEntry() {
   renderAll();
 }
 
+function addConsumeEntry() {
+  if (!elements.consumeMultiplierInput || !elements.consumeDateInput) {
+    return;
+  }
+  const item = getConsumeItem();
+  const category = getConsumeCategory();
+  if (!item || !category) {
+    setConsumeHint("请先选择固定项条目。", "warn");
+    return;
+  }
+
+  const multiplier = parseFloat(elements.consumeMultiplierInput.value);
+  if (!multiplier || multiplier <= 0) {
+    setConsumeHint("倍数需要大于 0。", "warn");
+    return;
+  }
+
+  const dateStr = getConsumeDateValue();
+  if (!dateStr) {
+    setConsumeHint("请选择日期。", "warn");
+    return;
+  }
+
+  const total = roundPoints(item.points * multiplier);
+  const entry = {
+    id: safeId(),
+    type: "consume",
+    effect: "tax",
+    categoryId: category.id,
+    categoryName: category.name,
+    itemId: item.id,
+    itemName: item.name,
+    desc: item.desc || "",
+    rule: item.rule || "",
+    points: item.points,
+    multiplier,
+    total,
+    date: dateStr,
+    createdAt: Date.now(),
+    source: "fixed"
+  };
+
+  state.entries.push(entry);
+  saveEntries();
+  setConsumeHint("已记录本次消费。", "ok");
+
+  const entryDate = parseDate(dateStr);
+  state.currentMonth = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
+  state.selectedDate = dateStr;
+  renderAll();
+}
+
+function addConsumeCustomEntry() {
+  if (!elements.consumeCustomName || !elements.consumeCustomPoints || !elements.consumeCustomMultiplier) {
+    return;
+  }
+  const name = elements.consumeCustomName.value.trim();
+  if (!name) {
+    setConsumeCustomHint("请填写项目名称。", "warn");
+    return;
+  }
+  const points = parseFloat(elements.consumeCustomPoints.value);
+  if (!points || points <= 0) {
+    setConsumeCustomHint("积分制需要大于 0。", "warn");
+    return;
+  }
+  const multiplier = parseFloat(elements.consumeCustomMultiplier.value);
+  if (!multiplier || multiplier <= 0) {
+    setConsumeCustomHint("倍数需要大于 0。", "warn");
+    return;
+  }
+  const dateStr = getConsumeDateValue();
+  if (!dateStr) {
+    setConsumeCustomHint("请选择日期。", "warn");
+    return;
+  }
+
+  const total = roundPoints(points * multiplier);
+  const entry = {
+    id: safeId(),
+    type: "consume",
+    effect: "tax",
+    categoryId: CONSUME_CUSTOM_CATEGORY_ID,
+    categoryName: CONSUME_CUSTOM_LABEL,
+    itemId: safeId(),
+    itemName: name,
+    desc: "",
+    rule: "",
+    points,
+    multiplier,
+    total,
+    date: dateStr,
+    createdAt: Date.now(),
+    source: "custom"
+  };
+
+  state.entries.push(entry);
+  saveEntries();
+  setConsumeCustomHint("已记录自定义消费。", "ok");
+  elements.consumeCustomName.value = "";
+  elements.consumeCustomPoints.value = "";
+  elements.consumeCustomMultiplier.value = "1";
+
+  const entryDate = parseDate(dateStr);
+  state.currentMonth = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
+  state.selectedDate = dateStr;
+  renderAll();
+}
+
+function handleConsumeDateChange() {
+  const dateStr = getConsumeDateValue();
+  if (!dateStr) {
+    return;
+  }
+  const dateObj = parseDate(dateStr);
+  state.selectedDate = dateStr;
+  state.currentMonth = new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+  renderAll();
+}
+
 function shiftPeriod(offset) {
   if (state.viewMode === "week") {
     const selected = parseDate(state.selectedDate);
@@ -3278,16 +3948,21 @@ function shiftPeriod(offset) {
 }
 
 async function init() {
-  const [scoreData, taxData, eventData] = await Promise.all([
+  const [scoreData, taxData, eventData, consumeData] = await Promise.all([
     loadJson("data/score_items.json", FALLBACK_SCORE_DATA),
     loadJson("data/tax_items.json", FALLBACK_TAX_DATA),
-    loadJson("data/event_items.json", FALLBACK_EVENT_DATA)
+    loadJson("data/event_items.json", FALLBACK_EVENT_DATA),
+    loadJson("data/consume_items.json", FALLBACK_CONSUME_DATA)
   ]);
   state.baseScoreData = scoreData;
   state.baseTaxData = taxData;
   state.baseEventData = normalizeEventData(eventData);
+  state.baseConsumeData = consumeData;
   state.usingFallbackData =
-    scoreData === FALLBACK_SCORE_DATA || taxData === FALLBACK_TAX_DATA || eventData === FALLBACK_EVENT_DATA;
+    scoreData === FALLBACK_SCORE_DATA ||
+    taxData === FALLBACK_TAX_DATA ||
+    eventData === FALLBACK_EVENT_DATA ||
+    consumeData === FALLBACK_CONSUME_DATA;
 
   const today = new Date();
   state.currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -3358,11 +4033,23 @@ async function init() {
   if (elements.openWeekPage) {
     elements.openWeekPage.addEventListener("click", openWeekPage);
   }
+  if (elements.openConsumePage) {
+    elements.openConsumePage.addEventListener("click", openConsumePage);
+  }
   if (elements.yearPageClose) {
     elements.yearPageClose.addEventListener("click", closeYearPage);
   }
   if (elements.weekPageClose) {
     elements.weekPageClose.addEventListener("click", closeWeekPage);
+  }
+  if (elements.consumePageClose) {
+    elements.consumePageClose.addEventListener("click", closeConsumePage);
+  }
+  if (elements.consumeManageButton) {
+    elements.consumeManageButton.addEventListener("click", openConsumeEditor);
+  }
+  if (elements.consumeDateInput) {
+    elements.consumeDateInput.addEventListener("change", handleConsumeDateChange);
   }
   if (elements.weekPagePrev) {
     elements.weekPagePrev.addEventListener("click", () => shiftWeek(-1));
@@ -3392,6 +4079,13 @@ async function init() {
       handleWeekCategorySelect(event);
     });
   }
+  if (elements.consumePage) {
+    elements.consumePage.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-consume") {
+        closeConsumePage();
+      }
+    });
+  }
   if (elements.yearRangeApply) {
     elements.yearRangeApply.addEventListener("click", applyYearRange);
   }
@@ -3399,6 +4093,22 @@ async function init() {
     elements.yearRangeReset.addEventListener("click", resetYearRange);
   }
   elements.addButton.addEventListener("click", addEntry);
+  if (elements.consumeAddButton) {
+    elements.consumeAddButton.addEventListener("click", addConsumeEntry);
+  }
+  if (elements.consumeCustomAdd) {
+    elements.consumeCustomAdd.addEventListener("click", addConsumeCustomEntry);
+  }
+  [elements.consumeCustomName, elements.consumeCustomPoints, elements.consumeCustomMultiplier].forEach((input) => {
+    if (!input) {
+      return;
+    }
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        addConsumeCustomEntry();
+      }
+    });
+  });
   elements.prevMonth.addEventListener("click", () => shiftPeriod(-1));
   elements.nextMonth.addEventListener("click", () => shiftPeriod(1));
   elements.openEditor.addEventListener("click", openEditor);
@@ -3430,6 +4140,9 @@ async function init() {
     }
     if (elements.weekPage && elements.weekPage.classList.contains("open")) {
       closeWeekPage();
+    }
+    if (elements.consumePage && elements.consumePage.classList.contains("open")) {
+      closeConsumePage();
     }
   });
 

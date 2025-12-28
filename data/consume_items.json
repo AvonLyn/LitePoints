@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "type": "consume",
+  "categories": [
+    {
+      "id": "daily",
+      "name": "日常消费",
+      "items": [
+        {
+          "id": "daily_food",
+          "name": "餐饮",
+          "desc": "吃饭/饮品",
+          "rule": "按实际消费",
+          "points": 1,
+          "cadence": "每次"
+        },
+        {
+          "id": "daily_fun",
+          "name": "娱乐",
+          "desc": "电影/游戏",
+          "rule": "按实际消费",
+          "points": 1,
+          "cadence": "每次"
+        }
+      ]
+    },
+    {
+      "id": "reward",
+      "name": "奖励兑换",
+      "items": [
+        {
+          "id": "reward_rest",
+          "name": "休息奖励",
+          "desc": "放松/休闲",
+          "rule": "按实际消费",
+          "points": 1,
+          "cadence": "每次"
+        }
+      ]
+    }
+  ]
+}
