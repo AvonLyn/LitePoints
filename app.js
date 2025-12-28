@@ -639,23 +639,24 @@ const elements = {
   consumePage: document.getElementById("consume-page"),
   consumePageClose: document.getElementById("consume-page-close"),
   consumeManageButton: document.getElementById("consume-manage"),
-  consumeCategoryList: document.getElementById("consume-category-list"),
-  consumeItemList: document.getElementById("consume-item-list"),
-  consumeSelectedItem: document.getElementById("consume-selected-item"),
+  consumeCategorySelect: document.getElementById("consume-category-select"),
+  consumeItemSelect: document.getElementById("consume-item-select"),
+  consumeNameInput: document.getElementById("consume-name"),
+  consumePointsInput: document.getElementById("consume-points"),
   consumeMultiplierInput: document.getElementById("consume-multiplier"),
   consumeDateInput: document.getElementById("consume-date"),
   consumeAddButton: document.getElementById("consume-add-entry"),
   consumeHint: document.getElementById("consume-hint"),
-  consumeCustomName: document.getElementById("consume-custom-name"),
-  consumeCustomPoints: document.getElementById("consume-custom-points"),
-  consumeCustomMultiplier: document.getElementById("consume-custom-multiplier"),
-  consumeCustomAdd: document.getElementById("consume-custom-add"),
-  consumeCustomHint: document.getElementById("consume-custom-hint"),
   consumeSummaryTitle: document.getElementById("consume-summary-title"),
+  consumeBalanceValue: document.getElementById("consume-balance-value"),
   consumeSummaryGrid: document.getElementById("consume-summary-grid"),
   consumeCategorySummary: document.getElementById("consume-category-summary"),
   consumeDayTitle: document.getElementById("consume-day-title"),
   consumeEntryList: document.getElementById("consume-entry-list"),
+  consumeEditorModal: document.getElementById("consume-editor-modal"),
+  closeConsumeEditor: document.getElementById("close-consume-editor"),
+  consumeEditorCategories: document.getElementById("consume-editor-categories"),
+  consumeAddCategoryButton: document.getElementById("consume-add-category"),
   openEditor: document.getElementById("open-editor"),
   editorModal: document.getElementById("editor-modal"),
   closeEditor: document.getElementById("close-editor"),
@@ -770,17 +771,6 @@ function setConsumeHint(message, tone) {
   elements.consumeHint.classList.remove("ok", "warn");
   if (tone) {
     elements.consumeHint.classList.add(tone);
-  }
-}
-
-function setConsumeCustomHint(message, tone) {
-  if (!elements.consumeCustomHint) {
-    return;
-  }
-  elements.consumeCustomHint.textContent = message || "";
-  elements.consumeCustomHint.classList.remove("ok", "warn");
-  if (tone) {
-    elements.consumeCustomHint.classList.add(tone);
   }
 }
 
@@ -2023,7 +2013,7 @@ function ensureConsumeSelection() {
 }
 
 function renderConsumeCategories() {
-  if (!elements.consumeCategoryList) {
+  if (!elements.consumeCategorySelect) {
     return;
   }
   const data = state.consumeData;
@@ -2032,102 +2022,93 @@ function renderConsumeCategories() {
   }
   ensureConsumeSelection();
 
-  elements.consumeCategoryList.innerHTML = "";
+  elements.consumeCategorySelect.innerHTML = "";
   if (!data.categories || data.categories.length === 0) {
-    elements.consumeCategoryList.innerHTML = `<div class="item-meta">暂无大类，请先添加。</div>`;
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "暂无大类";
+    elements.consumeCategorySelect.appendChild(option);
+    elements.consumeCategorySelect.disabled = true;
     return;
   }
+
   data.categories.forEach((category) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chip-btn";
-    button.textContent = category.name;
-    if (category.id === state.consumeCategoryId) {
-      button.classList.add("active");
-    }
-    button.addEventListener("click", () => {
-      state.consumeCategoryId = category.id;
-      state.consumeItemId = null;
-      renderConsumeCategories();
-      renderConsumeItems();
-      renderConsumeSelectedItem();
-    });
-    elements.consumeCategoryList.appendChild(button);
+    const option = document.createElement("option");
+    option.value = category.id;
+    option.textContent = category.name;
+    elements.consumeCategorySelect.appendChild(option);
   });
+  elements.consumeCategorySelect.disabled = false;
+  if (state.consumeCategoryId) {
+    elements.consumeCategorySelect.value = state.consumeCategoryId;
+  }
 }
 
 function renderConsumeItems() {
-  if (!elements.consumeItemList) {
+  if (!elements.consumeItemSelect) {
     return;
   }
+  ensureConsumeSelection();
   const category = getConsumeCategory();
-  elements.consumeItemList.innerHTML = "";
+  elements.consumeItemSelect.innerHTML = "";
   if (!category) {
-    elements.consumeItemList.innerHTML = `<div class="item-meta">暂无条目，请先选择或添加大类。</div>`;
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "请先选择大类";
+    elements.consumeItemSelect.appendChild(option);
+    elements.consumeItemSelect.disabled = true;
+    state.consumeItemId = null;
     return;
   }
   if (!category.items || category.items.length === 0) {
-    elements.consumeItemList.innerHTML = `<div class="item-meta">暂无条目，请在管理固定项中添加。</div>`;
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "暂无消费项，请在管理消费项中添加";
+    elements.consumeItemSelect.appendChild(option);
+    elements.consumeItemSelect.disabled = true;
+    state.consumeItemId = null;
     return;
   }
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "请选择消费项";
+  placeholder.disabled = true;
+  placeholder.selected = !state.consumeItemId;
+  elements.consumeItemSelect.appendChild(placeholder);
+
   category.items.forEach((item) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "item-btn";
-    if (item.id === state.consumeItemId) {
-      button.classList.add("active");
-    }
-
-    const title = document.createElement("div");
-    title.className = "item-title";
-    title.textContent = item.name;
-
-    const meta = document.createElement("div");
-    meta.className = "item-meta";
-    const metaParts = [`${formatPoints(item.points)} 积分`];
-    if (item.desc) {
-      metaParts.push(item.desc);
-    }
-    meta.textContent = metaParts.join(" · ");
-
-    const rule = document.createElement("div");
-    rule.className = "item-meta";
-    rule.textContent = item.rule || item.cadence || "";
-
-    button.appendChild(title);
-    button.appendChild(meta);
-    if (rule.textContent) {
-      button.appendChild(rule);
-    }
-    button.addEventListener("click", () => {
-      state.consumeItemId = item.id;
-      renderConsumeItems();
-      renderConsumeSelectedItem();
-    });
-    elements.consumeItemList.appendChild(button);
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    elements.consumeItemSelect.appendChild(option);
   });
+  elements.consumeItemSelect.disabled = false;
+  if (state.consumeItemId && category.items.some((item) => item.id === state.consumeItemId)) {
+    elements.consumeItemSelect.value = state.consumeItemId;
+  } else {
+    state.consumeItemId = null;
+    elements.consumeItemSelect.value = "";
+  }
 }
 
-function renderConsumeSelectedItem() {
-  if (!elements.consumeSelectedItem) {
+function handleConsumeCategoryChange(event) {
+  const nextId = event.target.value;
+  if (!nextId || nextId === state.consumeCategoryId) {
     return;
   }
-  const item = getConsumeItem();
-  const category = getConsumeCategory();
-  if (!item || !category) {
-    elements.consumeSelectedItem.innerHTML = `
-      <div class="selected-title">尚未选择条目</div>
-      <div class="selected-meta">请先选择固定项条目</div>
-    `;
+  state.consumeCategoryId = nextId;
+  state.consumeItemId = null;
+  renderConsumeCategories();
+  renderConsumeItems();
+}
+
+function handleConsumeItemChange(event) {
+  const nextId = event.target.value;
+  if (!nextId || nextId === state.consumeItemId) {
     return;
   }
-  const cadence = item.cadence ? ` · ${item.cadence}` : "";
-  const extra = [item.desc, item.rule].filter(Boolean).join(" · ");
-  elements.consumeSelectedItem.innerHTML = `
-    <div class="selected-title">${item.name}</div>
-    <div class="selected-meta">${category.name} · 消费 · 基础 ${formatPoints(item.points)} 积分${cadence}</div>
-    <div class="selected-meta">${extra}</div>
-  `;
+  state.consumeItemId = nextId;
 }
 
 function setActiveType(type) {
@@ -2186,6 +2167,23 @@ function getTotalsForRange(startDate, endDate) {
       } else {
         tax += entry.total;
       }
+    }
+  });
+  return {
+    score: roundPoints(score),
+    tax: roundPoints(tax),
+    net: roundPoints(score - tax)
+  };
+}
+
+function getTotalsOverall() {
+  let score = 0;
+  let tax = 0;
+  state.entries.forEach((entry) => {
+    if (getEntryEffect(entry) === "score") {
+      score += entry.total;
+    } else {
+      tax += entry.total;
     }
   });
   return {
@@ -2485,16 +2483,20 @@ function renderConsumeEntryList(dateStr) {
 
     const name = document.createElement("div");
     name.className = "entry-name";
-    name.textContent = entry.itemName;
+    name.textContent = entry.projectName || entry.itemName || "未命名";
 
     const meta = document.createElement("div");
     meta.className = "entry-meta";
     const metaParts = [];
+    const categoryLabel =
+      entry.categoryName ||
+      (entry.categoryId === CONSUME_CUSTOM_CATEGORY_ID ? CONSUME_CUSTOM_LABEL : "消费");
+    metaParts.push(categoryLabel);
+    if (entry.projectName && entry.itemName) {
+      metaParts.push(entry.itemName);
+    }
     if (entry.categoryId === CONSUME_CUSTOM_CATEGORY_ID) {
-      metaParts.push(CONSUME_CUSTOM_LABEL);
       metaParts.push(`积分制 ${formatPoints(entry.points)}`);
-    } else {
-      metaParts.push(entry.categoryName);
     }
     metaParts.push(`倍数 ${formatPoints(entry.multiplier)}`);
     meta.textContent = metaParts.join(" · ");
@@ -2539,6 +2541,12 @@ function renderConsumeSummary() {
   const dayTotal = dateStr ? getConsumeTotalForDate(dateStr) : 0;
   const rangeLabel = formatRangeLabel(range.start, range.end);
   elements.consumeSummaryTitle.textContent = `${range.start.getFullYear()}年${range.start.getMonth() + 1}月消费 · ${rangeLabel}`;
+  if (elements.consumeBalanceValue) {
+    const totals = getTotalsOverall();
+    const net = totals.net;
+    elements.consumeBalanceValue.textContent = `${net >= 0 ? "+" : ""}${formatPoints(net)}`;
+    elements.consumeBalanceValue.classList.toggle("tax", net < 0);
+  }
 
   elements.consumeSummaryGrid.innerHTML = `
     <div class="summary-card">
@@ -2575,7 +2583,6 @@ function renderConsumePage() {
   }
   renderConsumeCategories();
   renderConsumeItems();
-  renderConsumeSelectedItem();
   renderConsumeSummary();
   renderConsumeEntryList(getConsumeDateValue());
 }
@@ -3547,6 +3554,107 @@ function renderEditor() {
   });
 }
 
+function renderConsumeEditor() {
+  if (!elements.consumeEditorCategories) {
+    return;
+  }
+  const data = state.consumeData;
+  elements.consumeEditorCategories.innerHTML = "";
+  if (!data || !Array.isArray(data.categories) || data.categories.length === 0) {
+    elements.consumeEditorCategories.innerHTML = `<div class="item-meta">暂无大类，请先添加。</div>`;
+    return;
+  }
+
+  data.categories.forEach((category) => {
+    const card = document.createElement("div");
+    card.className = "editor-category";
+
+    const row = document.createElement("div");
+    row.className = "editor-row";
+    row.appendChild(
+      createEditorField("大类名称", "name", category.name, {
+        dataType: "consume",
+        categoryId: category.id
+      })
+    );
+
+    const removeCategoryButton = document.createElement("button");
+    removeCategoryButton.type = "button";
+    removeCategoryButton.className = "editor-remove";
+    removeCategoryButton.textContent = "删除大类";
+    removeCategoryButton.dataset.action = "remove-category";
+    removeCategoryButton.dataset.type = "consume";
+    removeCategoryButton.dataset.categoryId = category.id;
+    row.appendChild(removeCategoryButton);
+    card.appendChild(row);
+
+    const itemsContainer = document.createElement("div");
+    itemsContainer.className = "editor-items";
+
+    if (!category.items || category.items.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "item-meta";
+      empty.textContent = "暂无条目，请添加。";
+      itemsContainer.appendChild(empty);
+    } else {
+      category.items.forEach((item) => {
+        const itemCard = document.createElement("div");
+        itemCard.className = "editor-item";
+
+        const itemGrid = document.createElement("div");
+        itemGrid.className = "editor-item-grid";
+        itemGrid.appendChild(
+          createEditorField("条目名称", "name", item.name, {
+            dataType: "consume",
+            categoryId: category.id,
+            itemId: item.id
+          })
+        );
+        itemGrid.appendChild(
+          createEditorField("说明", "desc", item.desc || "", {
+            dataType: "consume",
+            categoryId: category.id,
+            itemId: item.id
+          })
+        );
+        itemGrid.appendChild(
+          createEditorField("规则", "rule", item.rule || "", {
+            dataType: "consume",
+            categoryId: category.id,
+            itemId: item.id
+          })
+        );
+        itemCard.appendChild(itemGrid);
+
+        const removeItemButton = document.createElement("button");
+        removeItemButton.type = "button";
+        removeItemButton.className = "editor-remove";
+        removeItemButton.textContent = "删除条目";
+        removeItemButton.dataset.action = "remove-item";
+        removeItemButton.dataset.type = "consume";
+        removeItemButton.dataset.categoryId = category.id;
+        removeItemButton.dataset.itemId = item.id;
+        itemCard.appendChild(removeItemButton);
+
+        itemsContainer.appendChild(itemCard);
+      });
+    }
+
+    card.appendChild(itemsContainer);
+
+    const addItemButton = document.createElement("button");
+    addItemButton.type = "button";
+    addItemButton.className = "ghost-btn editor-add";
+    addItemButton.textContent = "+ 添加条目";
+    addItemButton.dataset.action = "add-item";
+    addItemButton.dataset.type = "consume";
+    addItemButton.dataset.categoryId = category.id;
+    card.appendChild(addItemButton);
+
+    elements.consumeEditorCategories.appendChild(card);
+  });
+}
+
 function openEditor() {
   state.editorType = state.activeType;
   elements.editorButtons.forEach((button) => {
@@ -3560,20 +3668,28 @@ function openEditor() {
 }
 
 function openConsumeEditor() {
-  state.editorType = "consume";
-  elements.editorButtons.forEach((button) => {
-    const active = button.dataset.type === state.editorType;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", active ? "true" : "false");
-  });
-  renderEditor();
-  elements.editorModal.classList.add("open");
-  elements.editorModal.setAttribute("aria-hidden", "false");
+  if (!elements.consumeEditorModal) {
+    return;
+  }
+  if (elements.consumePage && elements.consumePage.classList.contains("open")) {
+    closeConsumePage();
+  }
+  renderConsumeEditor();
+  elements.consumeEditorModal.classList.add("open");
+  elements.consumeEditorModal.setAttribute("aria-hidden", "false");
 }
 
 function closeEditor() {
   elements.editorModal.classList.remove("open");
   elements.editorModal.setAttribute("aria-hidden", "true");
+}
+
+function closeConsumeEditor() {
+  if (!elements.consumeEditorModal) {
+    return;
+  }
+  elements.consumeEditorModal.classList.remove("open");
+  elements.consumeEditorModal.setAttribute("aria-hidden", "true");
 }
 
 function handleEditorInput(event) {
@@ -3638,6 +3754,11 @@ function handleEditorAction(event) {
   if (!button) {
     return;
   }
+  const isConsumeEditor =
+    elements.consumeEditorModal &&
+    (event.currentTarget === elements.consumeEditorCategories ||
+      button.closest("#consume-editor-modal"));
+  const renderEditorView = isConsumeEditor ? renderConsumeEditor : renderEditor;
   const action = button.dataset.action;
   const type = button.dataset.type || state.editorType;
   const data = getDataByType(type);
@@ -3656,7 +3777,7 @@ function handleEditorAction(event) {
     };
     data.categories.push(category);
     saveCatalog();
-    renderEditor();
+    renderEditorView();
     if (type === state.activeType) {
       state.activeCategoryId = category.id;
       state.activeItemId = null;
@@ -3690,7 +3811,7 @@ function handleEditorAction(event) {
     } else if (state.viewMode === "week" && type === "score") {
       renderWeekView();
     }
-    renderEditor();
+    renderEditorView();
     return;
   }
 
@@ -3718,13 +3839,12 @@ function handleEditorAction(event) {
     }
     category.items.push(newItem);
     saveCatalog();
-    renderEditor();
+    renderEditorView();
     if (type === state.activeType) {
       renderItems();
       renderSelectedItem();
     } else if (type === "consume") {
       renderConsumeItems();
-      renderConsumeSelectedItem();
     }
     return;
   }
@@ -3746,9 +3866,8 @@ function handleEditorAction(event) {
         state.consumeItemId = null;
       }
       renderConsumeItems();
-      renderConsumeSelectedItem();
     }
-    renderEditor();
+    renderEditorView();
     renderItems();
     return;
   }
@@ -3804,13 +3923,35 @@ function addEntry() {
 }
 
 function addConsumeEntry() {
-  if (!elements.consumeMultiplierInput || !elements.consumeDateInput) {
+  if (
+    !elements.consumeNameInput ||
+    !elements.consumePointsInput ||
+    !elements.consumeMultiplierInput ||
+    !elements.consumeDateInput
+  ) {
     return;
   }
-  const item = getConsumeItem();
   const category = getConsumeCategory();
-  if (!item || !category) {
-    setConsumeHint("请先选择固定项条目。", "warn");
+  if (!category) {
+    setConsumeHint("请选择消费大类。", "warn");
+    return;
+  }
+
+  const selectedItem = getConsumeItem();
+  if (!selectedItem) {
+    setConsumeHint("请选择消费项。", "warn");
+    return;
+  }
+
+  const projectName = elements.consumeNameInput ? elements.consumeNameInput.value.trim() : "";
+  if (!projectName) {
+    setConsumeHint("请填写项目名称。", "warn");
+    return;
+  }
+
+  const points = elements.consumePointsInput ? parseFloat(elements.consumePointsInput.value) : NaN;
+  if (!points || points <= 0) {
+    setConsumeHint("积分制需要大于 0。", "warn");
     return;
   }
 
@@ -3826,85 +3967,28 @@ function addConsumeEntry() {
     return;
   }
 
-  const total = roundPoints(item.points * multiplier);
+  const total = roundPoints(points * multiplier);
   const entry = {
     id: safeId(),
     type: "consume",
     effect: "tax",
     categoryId: category.id,
     categoryName: category.name,
-    itemId: item.id,
-    itemName: item.name,
-    desc: item.desc || "",
-    rule: item.rule || "",
-    points: item.points,
+    itemId: selectedItem.id,
+    itemName: selectedItem.name,
+    projectName,
+    desc: selectedItem.desc || "",
+    rule: selectedItem.rule || "",
+    points,
     multiplier,
     total,
     date: dateStr,
-    createdAt: Date.now(),
-    source: "fixed"
+    createdAt: Date.now()
   };
 
   state.entries.push(entry);
   saveEntries();
   setConsumeHint("已记录本次消费。", "ok");
-
-  const entryDate = parseDate(dateStr);
-  state.currentMonth = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
-  state.selectedDate = dateStr;
-  renderAll();
-}
-
-function addConsumeCustomEntry() {
-  if (!elements.consumeCustomName || !elements.consumeCustomPoints || !elements.consumeCustomMultiplier) {
-    return;
-  }
-  const name = elements.consumeCustomName.value.trim();
-  if (!name) {
-    setConsumeCustomHint("请填写项目名称。", "warn");
-    return;
-  }
-  const points = parseFloat(elements.consumeCustomPoints.value);
-  if (!points || points <= 0) {
-    setConsumeCustomHint("积分制需要大于 0。", "warn");
-    return;
-  }
-  const multiplier = parseFloat(elements.consumeCustomMultiplier.value);
-  if (!multiplier || multiplier <= 0) {
-    setConsumeCustomHint("倍数需要大于 0。", "warn");
-    return;
-  }
-  const dateStr = getConsumeDateValue();
-  if (!dateStr) {
-    setConsumeCustomHint("请选择日期。", "warn");
-    return;
-  }
-
-  const total = roundPoints(points * multiplier);
-  const entry = {
-    id: safeId(),
-    type: "consume",
-    effect: "tax",
-    categoryId: CONSUME_CUSTOM_CATEGORY_ID,
-    categoryName: CONSUME_CUSTOM_LABEL,
-    itemId: safeId(),
-    itemName: name,
-    desc: "",
-    rule: "",
-    points,
-    multiplier,
-    total,
-    date: dateStr,
-    createdAt: Date.now(),
-    source: "custom"
-  };
-
-  state.entries.push(entry);
-  saveEntries();
-  setConsumeCustomHint("已记录自定义消费。", "ok");
-  elements.consumeCustomName.value = "";
-  elements.consumeCustomPoints.value = "";
-  elements.consumeCustomMultiplier.value = "1";
 
   const entryDate = parseDate(dateStr);
   state.currentMonth = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
@@ -4048,6 +4132,12 @@ async function init() {
   if (elements.consumeManageButton) {
     elements.consumeManageButton.addEventListener("click", openConsumeEditor);
   }
+  if (elements.consumeCategorySelect) {
+    elements.consumeCategorySelect.addEventListener("change", handleConsumeCategoryChange);
+  }
+  if (elements.consumeItemSelect) {
+    elements.consumeItemSelect.addEventListener("change", handleConsumeItemChange);
+  }
   if (elements.consumeDateInput) {
     elements.consumeDateInput.addEventListener("change", handleConsumeDateChange);
   }
@@ -4086,6 +4176,16 @@ async function init() {
       }
     });
   }
+  if (elements.consumeEditorModal) {
+    elements.consumeEditorModal.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-consume-editor") {
+        closeConsumeEditor();
+      }
+    });
+  }
+  if (elements.closeConsumeEditor) {
+    elements.closeConsumeEditor.addEventListener("click", closeConsumeEditor);
+  }
   if (elements.yearRangeApply) {
     elements.yearRangeApply.addEventListener("click", applyYearRange);
   }
@@ -4096,19 +4196,6 @@ async function init() {
   if (elements.consumeAddButton) {
     elements.consumeAddButton.addEventListener("click", addConsumeEntry);
   }
-  if (elements.consumeCustomAdd) {
-    elements.consumeCustomAdd.addEventListener("click", addConsumeCustomEntry);
-  }
-  [elements.consumeCustomName, elements.consumeCustomPoints, elements.consumeCustomMultiplier].forEach((input) => {
-    if (!input) {
-      return;
-    }
-    input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        addConsumeCustomEntry();
-      }
-    });
-  });
   elements.prevMonth.addEventListener("click", () => shiftPeriod(-1));
   elements.nextMonth.addEventListener("click", () => shiftPeriod(1));
   elements.openEditor.addEventListener("click", openEditor);
@@ -4120,6 +4207,15 @@ async function init() {
   elements.editorCategories.addEventListener("click", handleEditorAction);
   elements.addCategoryButton.dataset.action = "add-category";
   elements.addCategoryButton.addEventListener("click", handleEditorAction);
+  if (elements.consumeEditorCategories) {
+    elements.consumeEditorCategories.addEventListener("change", handleEditorInput);
+    elements.consumeEditorCategories.addEventListener("click", handleEditorAction);
+  }
+  if (elements.consumeAddCategoryButton) {
+    elements.consumeAddCategoryButton.dataset.action = "add-category";
+    elements.consumeAddCategoryButton.dataset.type = "consume";
+    elements.consumeAddCategoryButton.addEventListener("click", handleEditorAction);
+  }
   elements.editorModal.addEventListener("click", (event) => {
     if (event.target.dataset.action === "close-editor") {
       closeEditor();
@@ -4143,6 +4239,9 @@ async function init() {
     }
     if (elements.consumePage && elements.consumePage.classList.contains("open")) {
       closeConsumePage();
+    }
+    if (elements.consumeEditorModal && elements.consumeEditorModal.classList.contains("open")) {
+      closeConsumeEditor();
     }
   });
 

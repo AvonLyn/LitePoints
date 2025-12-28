@@ -362,7 +362,8 @@ select:focus-visible {
 }
 
 input[type="number"],
-input[type="date"] {
+input[type="date"],
+input[type="text"] {
   border-radius: 10px;
   border: 1px solid rgba(31, 41, 51, 0.15);
   padding: 8px 10px;
@@ -921,35 +922,27 @@ input[type="date"] {
   gap: 10px;
 }
 
-.consume-custom-row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.7fr 0.7fr auto;
-  gap: 8px;
-  padding: 10px;
-  border-radius: 14px;
-  background: rgba(15, 118, 110, 0.08);
-  border: 1px solid rgba(15, 118, 110, 0.2);
-}
-
-.consume-custom-input {
+.consume-select {
   border-radius: 10px;
   border: 1px solid rgba(31, 41, 51, 0.15);
   padding: 8px 10px;
   font-size: 14px;
   background: #fff;
-}
-
-.primary-btn.inline {
-  width: auto;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
+  width: 100%;
 }
 
 .consume-summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.consume-modal {
+  z-index: 14;
+}
+
+.consume-editor-card {
+  width: min(820px, 92vw);
 }
 
 .summary-value.tax {
@@ -1212,7 +1205,7 @@ input[type="date"] {
 
 .editor-toggle {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   border: 1px solid var(--outline);
   border-radius: 999px;
   overflow: hidden;
@@ -1516,11 +1509,4 @@ input[type="date"] {
     grid-template-columns: 1fr;
   }
 
-  .consume-custom-row {
-    grid-template-columns: 1fr;
-  }
-
-  .consume-custom-row .primary-btn.inline {
-    width: 100%;
-  }
 }

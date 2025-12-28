@@ -149,7 +149,6 @@
           <button class="editor-btn active" data-type="score" role="tab" aria-selected="true">得分项</button>
           <button class="editor-btn" data-type="tax" role="tab" aria-selected="false">税收项</button>
           <button class="editor-btn" data-type="event" role="tab" aria-selected="false">活动项</button>
-          <button class="editor-btn" data-type="consume" role="tab" aria-selected="false">消费项</button>
         </div>
         <div class="editor-body">
           <div class="editor-hint">修改后会自动保存到本地浏览器</div>
@@ -268,20 +267,22 @@
         <div class="report-head">
           <div class="report-title">消费管理</div>
           <div class="report-actions">
-            <button id="consume-manage" class="ghost-btn small" type="button">管理固定项</button>
+            <button id="consume-manage" class="ghost-btn small" type="button">管理消费项</button>
             <button id="consume-page-close" class="ghost-btn" type="button">返回</button>
           </div>
         </div>
         <div class="consume-body">
           <section class="consume-input">
             <div class="consume-section">
-              <div class="summary-title tax">固定项</div>
-              <div id="consume-category-list" class="chip-list"></div>
-              <div id="consume-item-list" class="item-list"></div>
-              <div id="consume-selected-item" class="selected-card">
-                <div class="selected-title">尚未选择条目</div>
-                <div class="selected-meta">请先选择固定项条目</div>
-              </div>
+              <div class="summary-title tax">记录消费</div>
+              <label class="field">
+                项目名称
+                <input id="consume-name" type="text" />
+              </label>
+              <label class="field">
+                积分值
+                <input id="consume-points" type="number" min="0.5" step="0.5" />
+              </label>
               <label class="field">
                 倍数
                 <input id="consume-multiplier" type="number" min="0.5" step="0.5" value="1" />
@@ -290,40 +291,26 @@
                 日期
                 <input id="consume-date" type="date" />
               </label>
+              <label class="field">
+                选择大类
+                <select id="consume-category-select" class="consume-select"></select>
+              </label>
+              <label class="field">
+                选择消费项
+                <select id="consume-item-select" class="consume-select"></select>
+              </label>
               <button id="consume-add-entry" class="primary-btn" type="button">记录消费</button>
               <div id="consume-hint" class="hint" role="status"></div>
-            </div>
-
-            <div class="consume-section consume-custom">
-              <div class="summary-title">自定义项</div>
-              <div class="consume-custom-row" role="group" aria-label="自定义消费输入">
-                <input id="consume-custom-name" class="consume-custom-input" type="text" placeholder="项目名称" />
-                <input
-                  id="consume-custom-points"
-                  class="consume-custom-input"
-                  type="number"
-                  min="0.5"
-                  step="0.5"
-                  placeholder="积分制"
-                />
-                <input
-                  id="consume-custom-multiplier"
-                  class="consume-custom-input"
-                  type="number"
-                  min="0.5"
-                  step="0.5"
-                  value="1"
-                  placeholder="倍数"
-                />
-                <button id="consume-custom-add" class="primary-btn inline" type="button">记录</button>
-              </div>
-              <div id="consume-custom-hint" class="hint" role="status"></div>
             </div>
           </section>
 
           <section class="consume-details">
             <div class="consume-section">
               <div class="summary-title tax" id="consume-summary-title">消费统计</div>
+              <div class="summary-card consume-balance-card">
+                <div class="summary-label">当前剩余积分</div>
+                <div id="consume-balance-value" class="summary-value">--</div>
+              </div>
               <div id="consume-summary-grid" class="consume-summary-grid"></div>
               <div class="summary-subtitle tax">本月消费大类</div>
               <div id="consume-category-summary" class="category-list"></div>
@@ -333,6 +320,21 @@
               <div id="consume-entry-list" class="entry-list"></div>
             </div>
           </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="consume-editor-modal" class="modal consume-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-action="close-consume-editor" aria-hidden="true"></div>
+      <div class="modal-card consume-editor-card" role="dialog" aria-modal="true" aria-label="编辑消费项">
+        <div class="modal-head">
+          <div class="modal-title">编辑消费项</div>
+          <button id="close-consume-editor" class="ghost-btn" type="button">完成</button>
+        </div>
+        <div class="editor-body">
+          <div class="editor-hint">修改后会自动保存到本地浏览器</div>
+          <div id="consume-editor-categories" class="editor-categories"></div>
+          <button id="consume-add-category" class="ghost-btn editor-add" type="button">+ 添加大类</button>
         </div>
       </div>
     </div>
