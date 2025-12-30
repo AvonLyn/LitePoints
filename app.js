@@ -535,6 +535,7 @@ const BACKUP_DB_KEY = "backup_directory";
 const BACKUP_PREFIX = "litepoints_backup";
 const BACKUP_LIMIT = 3;
 const BACKUP_VERSION = "1.0";
+const EXPORT_FOLDER = "exports";
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 const WEEKDAY_FULL = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -564,6 +565,8 @@ const state = {
   backupDirectoryHandle: null,
   backupPermission: "unknown",
   backupIndex: null,
+  exportType: null,
+  exportFormat: "html",
   autoBackupQueue: 0,
   autoBackupRunning: false,
   suspendAutoBackup: false,
@@ -580,6 +583,19 @@ const elements = {
   backupImportButton: document.getElementById("backup-import"),
   backupFileInput: document.getElementById("backup-file-input"),
   backupStatus: document.getElementById("backup-status"),
+  openExportButton: document.getElementById("open-export"),
+  exportModal: document.getElementById("export-modal"),
+  exportModalTitle: document.getElementById("export-modal-title"),
+  exportTypeButtons: document.querySelectorAll(".export-type-btn"),
+  exportFormatInputs: document.querySelectorAll('input[name="export-format"]'),
+  exportSelectAll: document.getElementById("export-select-all"),
+  exportClear: document.getElementById("export-clear"),
+  exportItemList: document.getElementById("export-item-list"),
+  exportHint: document.getElementById("export-hint"),
+  exportConfirm: document.getElementById("export-confirm"),
+  importMarkdownButton: document.getElementById("import-markdown"),
+  importMarkdownInput: document.getElementById("import-markdown-input"),
+  exportClose: document.getElementById("close-export"),
   toggleButtons: document.querySelectorAll(".toggle-btn"),
   categoryList: document.getElementById("category-list"),
   itemList: document.getElementById("item-list"),
@@ -970,6 +986,764 @@ function sanitizeFileName(value) {
     .trim()
     .replace(/[\\/:*?"<>|]/g, "_");
   return safe || "未命名";
+}
+
+function setExportHint(message, tone) {
+  if (!elements.exportHint) {
+    return;
+  }
+  elements.exportHint.textContent = message || "";
+  elements.exportHint.classList.remove("ok", "warn");
+  if (tone) {
+    elements.exportHint.classList.add(tone);
+  }
+}
+
+function getExportTypeLabel(type) {
+  if (type === "score") {
+    return "得分项";
+  }
+  if (type === "tax") {
+    return "税收项";
+  }
+  if (type === "event") {
+    return "活动项";
+  }
+  return "条目";
+}
+
+function setExportType(type) {
+  if (!type) {
+    return;
+  }
+  state.exportType = type;
+  elements.exportTypeButtons.forEach((button) => {
+    const active = button.dataset.type === type;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  if (elements.exportModalTitle) {
+    elements.exportModalTitle.textContent = `导出${getExportTypeLabel(type)}`;
+  }
+  renderExportItems();
+  setExportHint("");
+}
+
+function buildExportItemSummary(item, type) {
+  const parts = [];
+  const pointsValue = Number(item && item.points);
+  if (Number.isFinite(pointsValue)) {
+    parts.push(`积分 ${formatPoints(pointsValue)}`);
+  }
+  if (type === "event") {
+    const direction = item && item.direction === "tax" ? "税收" : "得分";
+    parts.push(`方向 ${direction}`);
+  }
+  if (type === "tax" && item && item.cadence) {
+    parts.push(`频次 ${item.cadence}`);
+  }
+  if (item && item.rule) {
+    parts.push(`规则 ${item.rule}`);
+  }
+  if (item && item.desc) {
+    parts.push(`说明 ${item.desc}`);
+  }
+  return parts.join(" · ");
+}
+
+function renderExportItems() {
+  if (!elements.exportItemList) {
+    return;
+  }
+  const data = getDataByType(state.exportType);
+  elements.exportItemList.innerHTML = "";
+  if (!data || !Array.isArray(data.categories) || data.categories.length === 0) {
+    elements.exportItemList.innerHTML = `<div class="item-meta">暂无条目，请先添加。</div>`;
+    return;
+  }
+
+  data.categories.forEach((category) => {
+    const card = document.createElement("div");
+    card.className = "export-category";
+
+    const title = document.createElement("div");
+    title.className = "export-category-title";
+    title.textContent = category.name || "未命名大类";
+    card.appendChild(title);
+
+    const list = document.createElement("div");
+    list.className = "export-items";
+
+    if (!Array.isArray(category.items) || category.items.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "item-meta";
+      empty.textContent = "暂无条目。";
+      list.appendChild(empty);
+    } else {
+      category.items.forEach((item) => {
+        const label = document.createElement("label");
+        label.className = "export-item";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.dataset.categoryId = category.id;
+        checkbox.dataset.itemId = item.id;
+
+        const info = document.createElement("div");
+        info.className = "export-item-info";
+
+        const name = document.createElement("div");
+        name.className = "export-item-name";
+        name.textContent = item.name || "未命名";
+
+        const meta = document.createElement("div");
+        meta.className = "export-item-meta";
+        meta.textContent = buildExportItemSummary(item, state.exportType) || "暂无说明。";
+
+        info.appendChild(name);
+        info.appendChild(meta);
+        label.appendChild(checkbox);
+        label.appendChild(info);
+        list.appendChild(label);
+      });
+    }
+
+    card.appendChild(list);
+    elements.exportItemList.appendChild(card);
+  });
+}
+
+function openExportModal() {
+  if (!elements.exportModal) {
+    return;
+  }
+  state.exportFormat = "html";
+  elements.exportFormatInputs.forEach((input) => {
+    input.checked = input.value === state.exportFormat;
+  });
+  const defaultType = state.activeType || "score";
+  setExportType(defaultType);
+  elements.exportModal.classList.add("open");
+  elements.exportModal.setAttribute("aria-hidden", "false");
+}
+
+function closeExportModal() {
+  if (!elements.exportModal) {
+    return;
+  }
+  elements.exportModal.classList.remove("open");
+  elements.exportModal.setAttribute("aria-hidden", "true");
+}
+
+function setExportSelection(checked) {
+  if (!elements.exportItemList) {
+    return;
+  }
+  elements.exportItemList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+    input.checked = checked;
+  });
+}
+
+function getSelectedExportFormat() {
+  const selected = Array.from(elements.exportFormatInputs || []).find((input) => input.checked);
+  return selected ? selected.value : null;
+}
+
+function getSelectedExportItems() {
+  if (!elements.exportItemList) {
+    return [];
+  }
+  const data = getDataByType(state.exportType);
+  if (!data || !Array.isArray(data.categories)) {
+    return [];
+  }
+  const selections = [];
+  const checked = elements.exportItemList.querySelectorAll('input[type="checkbox"]:checked');
+  checked.forEach((input) => {
+    const { categoryId, itemId } = input.dataset;
+    if (!categoryId || !itemId) {
+      return;
+    }
+    const category = data.categories.find((entry) => entry.id === categoryId);
+    if (!category || !Array.isArray(category.items)) {
+      return;
+    }
+    const item = category.items.find((entry) => entry.id === itemId);
+    if (!item) {
+      return;
+    }
+    selections.push({ category, item });
+  });
+  return selections;
+}
+
+function escapeMarkdownCell(value) {
+  return String(value ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\|/g, "\\|")
+    .trim();
+}
+
+function formatMarkdownValue(value) {
+  const safe = escapeMarkdownCell(value);
+  return safe ? safe : "-";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getExportColumns(type) {
+  if (type === "tax") {
+    return ["大类", "条目", "积分", "频次", "规则", "说明"];
+  }
+  if (type === "event") {
+    return ["大类", "条目", "积分", "方向", "规则", "说明"];
+  }
+  return ["大类", "条目", "积分", "规则", "说明"];
+}
+
+function getExportRowValues(type, selection) {
+  const categoryName = selection.category && selection.category.name ? selection.category.name : "未命名";
+  const item = selection.item || {};
+  const itemName = item.name || "未命名";
+  const pointsValue = Number(item.points);
+  const pointsLabel = Number.isFinite(pointsValue) ? formatPoints(pointsValue) : "-";
+  const rule = item.rule || "-";
+  const desc = item.desc || "-";
+
+  if (type === "tax") {
+    return [categoryName, itemName, pointsLabel, item.cadence || "-", rule, desc];
+  }
+  if (type === "event") {
+    const direction = item.direction === "tax" ? "税收" : "得分";
+    return [categoryName, itemName, pointsLabel, direction, rule, desc];
+  }
+  return [categoryName, itemName, pointsLabel, rule, desc];
+}
+
+function buildExportMarkdown(payload) {
+  const { type, selections, exportDate } = payload;
+  const safeSelections = Array.isArray(selections) ? selections : [];
+  const typeLabel = getExportTypeLabel(type);
+  const dateLabel = toDateString(exportDate);
+  const columns = getExportColumns(type);
+  const header = `| ${columns.join(" | ")} |`;
+  const divider = `| ${columns.map(() => "---").join(" | ")} |`;
+  const rows = safeSelections
+    .map((selection) => {
+      const values = getExportRowValues(type, selection);
+      return `| ${values.map((value) => formatMarkdownValue(value)).join(" | ")} |`;
+    })
+    .join("\n");
+
+  return [
+    `# ${formatMarkdownValue(typeLabel)}`,
+    "",
+    "## 导出信息",
+    "",
+    "| 字段 | 内容 |",
+    "| --- | --- |",
+    `| 类型 | ${formatMarkdownValue(typeLabel)} |`,
+    `| 导出日期 | ${formatMarkdownValue(dateLabel)} |`,
+    `| 条目数 | ${safeSelections.length} |`,
+    "",
+    "## 条目表",
+    "",
+    header,
+    divider,
+    rows,
+    ""
+  ].join("\n");
+}
+
+function buildExportHtml(payload) {
+  const { type, selections, exportDate } = payload;
+  const safeSelections = Array.isArray(selections) ? selections : [];
+  const typeLabel = getExportTypeLabel(type);
+  const dateLabel = toDateString(exportDate);
+  const columns = getExportColumns(type);
+  const headerRow = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const bodyRows = safeSelections
+    .map((selection) => {
+      const values = getExportRowValues(type, selection);
+      const cells = values.map((value) => `<td>${escapeHtml(value)}</td>`).join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("\n        ");
+
+  return `<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(typeLabel)}</title>
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 12mm;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Arial", "Helvetica", sans-serif;
+        color: #111;
+        background: #f5f5f5;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .page {
+        width: 186mm;
+        margin: 16px auto;
+        background: #fff;
+        padding: 6mm 0 4mm;
+      }
+      h1 {
+        font-size: 26px;
+        margin: 0 0 8px;
+        letter-spacing: 0.04em;
+      }
+      .meta {
+        font-size: 12px;
+        color: #444;
+        margin-bottom: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border: 1px solid #111;
+        text-align: left;
+        vertical-align: top;
+        line-height: 1.4;
+        word-break: break-word;
+      }
+      th {
+        font-weight: 600;
+        background: #f2f2f2;
+      }
+      thead {
+        display: table-header-group;
+      }
+      tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      @media print {
+        body {
+          background: #fff;
+          font-size: 12pt;
+        }
+        .page {
+          width: 100%;
+          margin: 0;
+          padding: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <h1>${escapeHtml(typeLabel)}</h1>
+      <div class="meta">导出日期 ${escapeHtml(dateLabel)} · 条目数 ${safeSelections.length}</div>
+      <table>
+        <thead>
+          <tr>${headerRow}</tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>`;
+}
+
+function buildExportFileName(type, format) {
+  const dateLabel = toDateString(new Date());
+  const safeName = sanitizeFileName(getExportTypeLabel(type));
+  const extension = format === "markdown" ? "md" : "html";
+  return `${safeName}_${dateLabel}.${extension}`;
+}
+
+function normalizeMarkdownType(label) {
+  const value = String(label || "").trim();
+  if (value.includes("得分")) {
+    return "score";
+  }
+  if (value.includes("税收")) {
+    return "tax";
+  }
+  if (value.includes("活动")) {
+    return "event";
+  }
+  return null;
+}
+
+function detectMarkdownTypeFromHeading(text) {
+  const match = String(text || "").match(/^#\s*(.+)$/m);
+  if (!match) {
+    return null;
+  }
+  return normalizeMarkdownType(match[1]);
+}
+
+function detectMarkdownTypeFromHeader(headerCells) {
+  if (headerCells.includes("方向")) {
+    return "event";
+  }
+  if (headerCells.includes("频次")) {
+    return "tax";
+  }
+  return "score";
+}
+
+function detectMarkdownTypeFromMeta(tables) {
+  if (!Array.isArray(tables)) {
+    return null;
+  }
+  for (const table of tables) {
+    const fieldIndex = table.header.findIndex((cell) => cell.includes("字段"));
+    const valueIndex = table.header.findIndex((cell) => cell.includes("内容"));
+    if (fieldIndex === -1 || valueIndex === -1) {
+      continue;
+    }
+    for (const row of table.rows) {
+      const field = row[fieldIndex] || "";
+      if (!String(field).includes("类型")) {
+        continue;
+      }
+      const value = row[valueIndex] || "";
+      const type = normalizeMarkdownType(value);
+      if (type) {
+        return type;
+      }
+    }
+  }
+  return null;
+}
+
+function normalizeMarkdownValue(value) {
+  const trimmed = String(value ?? "").trim();
+  return trimmed === "-" ? "" : trimmed;
+}
+
+function normalizeMarkdownDirection(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "税收" || normalized === "tax") {
+    return "tax";
+  }
+  return "score";
+}
+
+function splitMarkdownRow(line) {
+  const cells = [];
+  let current = "";
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === "|" && !escaped) {
+      cells.push(current);
+      current = "";
+      continue;
+    }
+    if (escaped) {
+      if (char === "|" || char === "\\") {
+        current += char;
+      } else {
+        current += `\\${char}`;
+      }
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    current += char;
+  }
+  if (escaped) {
+    current += "\\";
+  }
+  cells.push(current);
+  if (cells.length && cells[0].trim() === "") {
+    cells.shift();
+  }
+  if (cells.length && cells[cells.length - 1].trim() === "") {
+    cells.pop();
+  }
+  return cells.map((cell) => cell.trim());
+}
+
+function isMarkdownDividerRow(cells) {
+  if (!Array.isArray(cells) || cells.length === 0) {
+    return false;
+  }
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+function extractMarkdownTables(text) {
+  const lines = String(text || "").split(/\r?\n/);
+  const tables = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim().startsWith("|")) {
+      continue;
+    }
+    const header = splitMarkdownRow(line);
+    if (header.length < 2) {
+      continue;
+    }
+    const dividerLine = lines[index + 1] || "";
+    if (!dividerLine.trim().startsWith("|")) {
+      continue;
+    }
+    const dividerCells = splitMarkdownRow(dividerLine);
+    if (!isMarkdownDividerRow(dividerCells)) {
+      continue;
+    }
+    const rows = [];
+    let rowIndex = index + 2;
+    while (rowIndex < lines.length && lines[rowIndex].trim().startsWith("|")) {
+      const rowCells = splitMarkdownRow(lines[rowIndex]);
+      if (!isMarkdownDividerRow(rowCells) && rowCells.length) {
+        rows.push(rowCells);
+      }
+      rowIndex += 1;
+    }
+    tables.push({ header, rows });
+    index = rowIndex - 1;
+  }
+  return tables;
+}
+
+function parseMarkdownImport(text) {
+  const tables = extractMarkdownTables(text);
+  const dataTable = tables.find(
+    (table) => table.header.includes("大类") && table.header.includes("条目")
+  );
+  if (!dataTable) {
+    return null;
+  }
+  const headerMap = new Map();
+  dataTable.header.forEach((label, idx) => {
+    const key = String(label || "").trim();
+    if (key) {
+      headerMap.set(key, idx);
+    }
+  });
+  if (!headerMap.has("大类") || !headerMap.has("条目")) {
+    return null;
+  }
+
+  const typeFromHeader = detectMarkdownTypeFromHeader(dataTable.header);
+  const typeFromMeta = detectMarkdownTypeFromMeta(tables);
+  const typeFromHeading = detectMarkdownTypeFromHeading(text);
+  const type = typeFromHeader || typeFromMeta || typeFromHeading || "score";
+
+  const items = [];
+  dataTable.rows.forEach((row) => {
+    const getCell = (key) => {
+      const index = headerMap.get(key);
+      return index === undefined ? "" : row[index] || "";
+    };
+    const categoryName = normalizeMarkdownValue(getCell("大类"));
+    const itemName = normalizeMarkdownValue(getCell("条目"));
+    if (!categoryName || !itemName) {
+      return;
+    }
+    const pointsRaw = normalizeMarkdownValue(getCell("积分"));
+    const parsedPoints = parseFloat(pointsRaw);
+    const points = Number.isFinite(parsedPoints) ? parsedPoints : 0;
+    const rule = normalizeMarkdownValue(getCell("规则"));
+    const desc = normalizeMarkdownValue(getCell("说明"));
+    const item = {
+      name: itemName,
+      points,
+      rule,
+      desc
+    };
+    if (type === "tax") {
+      item.cadence = normalizeMarkdownValue(getCell("频次"));
+    }
+    if (type === "event") {
+      item.direction = normalizeMarkdownDirection(getCell("方向"));
+    }
+    items.push({ categoryName, item });
+  });
+  if (items.length === 0) {
+    return null;
+  }
+
+  const categoryMap = new Map();
+  items.forEach((entry) => {
+    if (!categoryMap.has(entry.categoryName)) {
+      categoryMap.set(entry.categoryName, { name: entry.categoryName, items: [] });
+    }
+    categoryMap.get(entry.categoryName).items.push(entry.item);
+  });
+
+  return {
+    type,
+    categories: Array.from(categoryMap.values()),
+    itemCount: items.length
+  };
+}
+
+function mergeImportedCatalog(parsed) {
+  const data = getDataByType(parsed.type);
+  if (!data) {
+    return null;
+  }
+  if (!Array.isArray(data.categories)) {
+    data.categories = [];
+  }
+  const categoryMap = new Map(data.categories.map((category) => [category.name, category]));
+  let addedCategories = 0;
+  let addedItems = 0;
+  let updatedItems = 0;
+
+  parsed.categories.forEach((incoming) => {
+    const categoryName = incoming.name || "未命名";
+    let targetCategory = categoryMap.get(categoryName);
+    if (!targetCategory) {
+      targetCategory = {
+        id: safeId(),
+        name: categoryName,
+        items: []
+      };
+      data.categories.push(targetCategory);
+      categoryMap.set(categoryName, targetCategory);
+      addedCategories += 1;
+    }
+    if (!Array.isArray(targetCategory.items)) {
+      targetCategory.items = [];
+    }
+    const itemMap = new Map(targetCategory.items.map((item) => [item.name, item]));
+    incoming.items.forEach((incomingItem) => {
+      const itemName = incomingItem.name || "未命名";
+      const existing = itemMap.get(itemName);
+      if (existing) {
+        Object.assign(existing, incomingItem, { name: itemName });
+        updatedItems += 1;
+        return;
+      }
+      const newItem = {
+        id: safeId(),
+        ...incomingItem,
+        name: itemName
+      };
+      targetCategory.items.push(newItem);
+      itemMap.set(itemName, newItem);
+      addedItems += 1;
+    });
+  });
+
+  saveCatalog();
+  return { addedCategories, addedItems, updatedItems };
+}
+
+async function handleMarkdownImport(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+  event.target.value = "";
+  let text = "";
+  try {
+    text = await file.text();
+  } catch (error) {
+    setExportHint("Markdown 文件读取失败。", "warn");
+    return;
+  }
+  const parsed = parseMarkdownImport(text);
+  if (!parsed) {
+    setExportHint("Markdown 格式不正确，无法导入。", "warn");
+    return;
+  }
+  const label = getExportTypeLabel(parsed.type);
+  const confirmMessage = `确认导入 ${label}？将合并 ${parsed.itemCount} 条条目，同名条目会被更新。`;
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+  const result = mergeImportedCatalog(parsed);
+  if (!result) {
+    setExportHint("导入失败，请重试。", "warn");
+    return;
+  }
+  setExportType(parsed.type);
+  renderAll();
+  setExportHint(
+    `已导入 ${parsed.itemCount} 条 · 新增大类 ${result.addedCategories} · 新增条目 ${result.addedItems} · 更新 ${result.updatedItems}`,
+    "ok"
+  );
+}
+
+async function ensureExportDirectory() {
+  if (!supportsFileSystemAccess()) {
+    setExportHint("当前浏览器不支持导出文件。", "warn");
+    return null;
+  }
+  const dirHandle = await ensureBackupDirectory(true);
+  if (!dirHandle) {
+    setExportHint("请先设置备份文件夹。", "warn");
+    return null;
+  }
+  try {
+    return await dirHandle.getDirectoryHandle(EXPORT_FOLDER, { create: true });
+  } catch (error) {
+    setExportHint("导出文件夹创建失败。", "warn");
+    return null;
+  }
+}
+
+async function handleExportConfirm() {
+  setExportHint("");
+  const format = getSelectedExportFormat();
+  if (!format) {
+    setExportHint("请选择导出格式。", "warn");
+    return;
+  }
+  const selections = getSelectedExportItems();
+  if (selections.length === 0) {
+    setExportHint("请至少选择 1 个条目。", "warn");
+    return;
+  }
+  const dirHandle = await ensureExportDirectory();
+  if (!dirHandle) {
+    return;
+  }
+  const exportDate = new Date();
+  const fileName = buildExportFileName(state.exportType, format);
+  const payload = {
+    type: state.exportType,
+    selections,
+    exportDate
+  };
+  const content = format === "markdown" ? buildExportMarkdown(payload) : buildExportHtml(payload);
+
+  try {
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    setExportHint(`已导出：${fileName}`, "ok");
+  } catch (error) {
+    setExportHint("导出失败，请重试。", "warn");
+  }
 }
 
 function buildBackupPayload(reason) {
@@ -4092,6 +4866,35 @@ async function init() {
     elements.backupImportButton.addEventListener("click", () => elements.backupFileInput.click());
     elements.backupFileInput.addEventListener("change", handleBackupImport);
   }
+  if (elements.openExportButton) {
+    elements.openExportButton.addEventListener("click", openExportModal);
+  }
+  elements.exportTypeButtons.forEach((button) => {
+    button.addEventListener("click", () => setExportType(button.dataset.type));
+  });
+  if (elements.exportClose) {
+    elements.exportClose.addEventListener("click", closeExportModal);
+  }
+  if (elements.exportSelectAll) {
+    elements.exportSelectAll.addEventListener("click", () => setExportSelection(true));
+  }
+  if (elements.exportClear) {
+    elements.exportClear.addEventListener("click", () => setExportSelection(false));
+  }
+  if (elements.exportConfirm) {
+    elements.exportConfirm.addEventListener("click", handleExportConfirm);
+  }
+  if (elements.importMarkdownButton && elements.importMarkdownInput) {
+    elements.importMarkdownButton.addEventListener("click", () => elements.importMarkdownInput.click());
+    elements.importMarkdownInput.addEventListener("change", handleMarkdownImport);
+  }
+  if (elements.exportModal) {
+    elements.exportModal.addEventListener("click", (event) => {
+      if (event.target.dataset.action === "close-export") {
+        closeExportModal();
+      }
+    });
+  }
 
   elements.toggleButtons.forEach((button) => {
     button.addEventListener("click", () => setActiveType(button.dataset.type));
@@ -4242,6 +5045,9 @@ async function init() {
     }
     if (elements.consumeEditorModal && elements.consumeEditorModal.classList.contains("open")) {
       closeConsumeEditor();
+    }
+    if (elements.exportModal && elements.exportModal.classList.contains("open")) {
+      closeExportModal();
     }
   });
 
